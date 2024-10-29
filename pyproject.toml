@@ -1,0 +1,50 @@
+[project]
+name = "crypto"
+version = "0.1.0"
+description = ""
+authors = ["João Natividade <87316339+joaosnet@users.noreply.github.com>"]
+requires-python = ">=3.12"
+dependencies = [
+    "python-binance >=1.0.19",
+    "yfinance >=0.2.43",
+    "dash >=2.17.1",
+    "scipy >=1.14.0",
+    "sympy >=1.13.2",
+    "dash-dangerously-set-inner-html >=0.0.2",
+    "antlr4-python3-runtime ==4.11",
+    "dash-mantine-components >=0.14.4",
+    "dash-iconify >=0.1.2",
+    "array-to-latex >=0.92",
+    "dash-resizable-panels >=0.1.0",
+    "python-dotenv >=1.0.1",
+    "httpx>=0.27.2",
+    "phxsocket>=0.1.5",
+    "pandas>=2.2.3",
+    "mitosheet>=0.2.2",
+]
+
+[tool.uv]
+dev-dependencies = [
+  "ipykernel>=6.29.5",
+  "pygwalker>=0.4.9.10",
+  "ruff >=0.6.5",
+  "taskipy>=1.13.0",
+]
+
+[tool.ruff]
+line-length = 79
+extend-exclude = ['migrations']
+
+[tool.ruff.lint]
+preview = true
+select = ['I', 'F', 'E', 'W', 'PL', 'PT']
+
+[tool.ruff.format]
+preview = true
+quote-style = 'single'
+
+[tool.taskipy.tasks]
+lint = 'ruff check . && ruff check . --diff'
+format = 'ruff check . --fix && ruff format .'
+jupyter = 'uv run --with jupyter jupyter lab'
+run = 'python main.py'
