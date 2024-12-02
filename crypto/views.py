@@ -19,8 +19,12 @@ from crypto.api_bitpreco import Buy, Sell, carregar_opcoes_criptomoedas
 from crypto.bot import get_interval
 from crypto.componentes_personalizados import graf_preco_atuais
 
+try:
+    from crypto.segredos import CAMINHO
+except ImportError:
+    from segredos import CAMINHO
+
 # Definição das variáveis de ambiente
-CAMINHO = r'C:\Users\joaod\Documents\2024.2\crypto\crypto'
 PRICE_FILE = CAMINHO + '/ticker.csv'
 BALANCE_FILE = CAMINHO + '/balance.csv'
 ORDERS_FILE = CAMINHO + '/executed_orders.csv'
@@ -1656,11 +1660,11 @@ def toggle_aside(opened, aside):
 )
 def alerta_preco(n_intervals):
     # lendo o arquivo de ordens
-    log_file_path = r'C:\Users\joaod\Documents\2024.2\crypto\log.csv'
-    log_df = pd.read_csv(log_file_path, encoding='utf-8')
+    log_file_path = CAMINHO + r'\log.csv'
+    log_df = pd.read_csv(log_file_path, sep=';', encoding='utf-8')
 
     # Converte a coluna 'time' para datetime
-    log_df['time'] = pd.to_datetime(log_df['time'], format='ISO8601')
+    log_df['time'] = pd.to_datetime(log_df['time'], format='mixed')
 
     # verificando se o ultimo log foi a seguntos atrás ou agora mesmo
     last_log = log_df['time'].iloc[-1]
@@ -1674,7 +1678,7 @@ def alerta_preco(n_intervals):
     auto_close = tempo_comparado * 1000
     if time_difference.seconds < tempo_comparado:
         loglevel = log_df['levelname'].iloc[-1]
-        if loglevel == ' INFO ':
+        if loglevel == 'INFO':
             return dmc.Notification(
                 id='my-notification',
                 title='Mensagem do Robô',
@@ -1684,7 +1688,7 @@ def alerta_preco(n_intervals):
                 autoClose=auto_close,
                 icon=DashIconify(icon='logos:geekbot'),
             )
-        elif loglevel == ' WARNING ':
+        elif loglevel == 'WARNING':
             return dmc.Notification(
                 id='my-notification',
                 title='Atenção',
@@ -1694,7 +1698,7 @@ def alerta_preco(n_intervals):
                 autoClose=auto_close,
                 icon=DashIconify(icon='twemoji:warning'),
             )
-        elif loglevel == ' ERROR ':
+        elif loglevel == 'ERROR':
             return dmc.Notification(
                 id='my-notification',
                 title='Mensagem do Robô',

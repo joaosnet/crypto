@@ -3,13 +3,12 @@ import json
 import httpx
 
 try:
-    from crypto.segredos import auth_token
+    from crypto.segredos import CAMINHO, auth_token
 except ImportError:
-    from segredos import auth_token
+    from segredos import CAMINHO, auth_token
 
 publicTradingApi = 'https://api.bitpreco.com/v1/trading/balance'
 
-CAMINHO = r'C:\Users\joaod\Documents\2024.2\crypto\crypto'
 COINPAIR_FILE = CAMINHO + '/coinpair.json'
 
 
@@ -52,7 +51,7 @@ def get_coinpair():
 def CoinTraderMonitor():
     response = httpx.get('https://cointradermonitor.com/api/pbb/v1/ticker')
     data = response.json()
-    print(f'last: {data['last']}, volume24h: {data['volume24h']}')
+    print(f'last: {data["last"]}, volume24h: {data["volume24h"]}')
     return data
 
 

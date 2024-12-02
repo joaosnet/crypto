@@ -21,6 +21,8 @@ dependencies = [
     "phxsocket>=0.1.5",
     "pandas>=2.2.3",
     "mitosheet>=0.2.2",
+    "ta-lib>=0.4.32",
+    "rich>=13.9.4",
 ]
 
 [tool.uv]

@@ -15,7 +15,11 @@ except:  # noqa: E722
     from api_bitpreco import Balance, ExecutedOrders, Ticker, get_coinpair
     from estrategias import execute_trade
 
-CAMINHO = r'C:\Users\joaod\Documents\2024.2\crypto\crypto'
+try:
+    from crypto.segredos import CAMINHO
+except ImportError:
+    from segredos import CAMINHO
+
 PRICE_FILE = CAMINHO + '/ticker.csv'
 BALANCE_FILE = CAMINHO + '/balance.csv'
 ORDERS_FILE = CAMINHO + '/executed_orders.csv'
