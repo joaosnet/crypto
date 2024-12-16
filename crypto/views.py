@@ -6,11 +6,13 @@ import traceback
 import dash_mantine_components as dmc
 import pandas as pd
 import plotly.graph_objects as go
-from dash import Input, Output, State, callback, dcc, html
+import plotly.io as pio
+from dash import ALL, Input, Output, Patch, State, callback, dcc, html
 from dash import callback_context as ctx
 from dash.exceptions import PreventUpdate
 from dash_iconify import DashIconify
-from dash_resizable_panels import Panel, PanelGroup, PanelResizeHandle
+
+# from dash_resizable_panels import Panel, PanelGroup, PanelResizeHandle
 from mitosheet.mito_dash.v1 import Spreadsheet, mito_callback
 
 from crypto import app, dash_utils
@@ -18,6 +20,7 @@ from crypto.api_binance import get_klines
 from crypto.api_bitpreco import Buy, Sell, carregar_opcoes_criptomoedas
 from crypto.bot import get_interval
 from crypto.componentes_personalizados import graf_preco_atuais
+from crypto.estrategias import INDICADORES_FILE
 
 try:
     from crypto.segredos import CAMINHO
@@ -30,6 +33,7 @@ BALANCE_FILE = CAMINHO + '/balance.csv'
 ORDERS_FILE = CAMINHO + '/executed_orders.csv'
 INTERVAL_FILE = CAMINHO + '/interval.json'
 
+dmc.add_figure_templates()
 
 # Definindo a coluna esquerda
 left_column = html.Div(
@@ -108,7 +112,7 @@ controle_tempo = html.Div([
         children=[
             html.Div(
                 children=[
-                    dmc.DatePicker(
+                    dmc.DatePickerInput(
                         id='date-picker',
                         placeholder='Selecione a data',
                         value=datetime.datetime.now().strftime('%Y-%m-%d'),
@@ -303,18 +307,6 @@ controle_tempo = html.Div([
         p='xl',
     ),
     html.Div(id='notify-container'),
-    dmc.Group(
-        children=[
-            dmc.Button(
-                'Load Data',
-                id='show-notification',
-            ),
-            dmc.Button(
-                'Update',
-                id='update-notification',
-            ),
-        ],
-    ),
 ])
 
 step = 0.00000001
@@ -351,131 +343,121 @@ right_column = html.Div(
                         gap=0,
                         children=[
                             # Compra
-                            dmc.Paper(
+                            dmc.Flex(
+                                direction={
+                                    'base': 'column',
+                                    'sm': 'column',
+                                },
+                                gap={'base': 'sm', 'sm': 'lg'},
+                                justify={'sm': 'center'},
+                                align={
+                                    'base': 'center',
+                                    'sm': 'center',
+                                },
                                 children=[
-                                    dmc.Flex(
-                                        direction={
-                                            'base': 'column',
-                                            'sm': 'column',
-                                        },
-                                        gap={'base': 'sm', 'sm': 'lg'},
-                                        justify={'sm': 'center'},
-                                        align={
-                                            'base': 'center',
-                                            'sm': 'center',
-                                        },
-                                        children=[
-                                            # price
+                                    # price
+                                    dmc.NumberInput(
+                                        id='preco-compra',
+                                        label='Preço unitário',
+                                        description='Preço de compra do ativo',  # noqa: E501
+                                        value=0,
+                                        min=0,
+                                        step=step,
+                                    ),
+                                    # volume
+                                    dmc.Stack(
+                                        [
                                             dmc.NumberInput(
-                                                id='preco-compra',
-                                                label='Preço unitário',
-                                                description='Preço de compra do ativo',  # noqa: E501
+                                                id='total-reais',
+                                                label='Total em reais',
                                                 value=0,
                                                 min=0,
                                                 step=step,
                                             ),
-                                            # volume
-                                            dmc.Stack(
-                                                [
-                                                    dmc.NumberInput(
-                                                        id='total-reais',
-                                                        label='Total em reais',
-                                                        value=0,
-                                                        min=0,
-                                                        step=step,
-                                                    ),
-                                                    dmc.Group(
+                                            dmc.Group(
+                                                children=[
+                                                    dmc.ButtonGroup(
+                                                        id='reais-buttons',
                                                         children=[
-                                                            dmc.ButtonGroup(
-                                                                id='reais-buttons',
-                                                                children=[
-                                                                    dmc.Button(
-                                                                        '10%',
-                                                                        id='reais-10',
-                                                                        variant='subtle',
-                                                                    ),
-                                                                    dmc.Button(
-                                                                        '25%',
-                                                                        id='reais-25',
-                                                                        variant='subtle',
-                                                                    ),
-                                                                    dmc.Button(
-                                                                        '50%',
-                                                                        id='reais-50',
-                                                                        variant='subtle',
-                                                                    ),
-                                                                    dmc.Button(
-                                                                        '100%',
-                                                                        id='reais-100',
-                                                                        variant='subtle',
-                                                                    ),
-                                                                ],
+                                                            dmc.Button(
+                                                                '10%',
+                                                                id='reais-10',
+                                                                variant='subtle',
+                                                            ),
+                                                            dmc.Button(
+                                                                '25%',
+                                                                id='reais-25',
+                                                                variant='subtle',
+                                                            ),
+                                                            dmc.Button(
+                                                                '50%',
+                                                                id='reais-50',
+                                                                variant='subtle',
+                                                            ),
+                                                            dmc.Button(
+                                                                '100%',
+                                                                id='reais-100',
+                                                                variant='subtle',
                                                             ),
                                                         ],
-                                                        gap='xs',
-                                                        justify='center',
                                                     ),
                                                 ],
-                                                align='center',
-                                                style={'width': '100%'},
-                                            ),
-                                            # amount
-                                            dmc.NumberInput(
-                                                id='amount',
-                                                label='Quantia',
-                                                description='Quantidade em BTC',  # noqa: E501
-                                                value=0,
-                                                min=0,
-                                                step=step,
-                                            ),
-                                            # limited
-                                            dmc.Select(
-                                                label='Tipo de Ordem',
-                                                description='Tipo de ordem de compra',  # noqa: E501
-                                                placeholder='Selecione uma opção',  # noqa: E501
-                                                id='limited',
-                                                value='limited',
-                                                data=[
-                                                    {
-                                                        'value': 'limited',
-                                                        'label': 'Limitada',
-                                                    },
-                                                    {
-                                                        'value': 'market',
-                                                        'label': 'Mercado',
-                                                    },
-                                                ],
-                                                mb=10,
-                                            ),
-                                            # market='BTC-BRL'
-                                            dmc.Select(
-                                                label='Selecione o Mercado',
-                                                placeholder='Selecione uma opção',  # noqa: E501
-                                                id='market-compra',
-                                                value='BTC-BRL',
-                                                data=carregar_opcoes_criptomoedas(),
-                                                mb=10,
-                                            ),
-                                            # botao de compra
-                                            dmc.Button(
-                                                'Comprar?',
-                                                variant='outline',
-                                                id='buy-button',
-                                            ),
-                                            dmc.Text(
-                                                id='buy-button-output',
-                                                size='sm',
-                                                mb=10,
+                                                gap='xs',
+                                                justify='center',
                                             ),
                                         ],
+                                        align='center',
+                                        style={'width': '100%'},
+                                    ),
+                                    # amount
+                                    dmc.NumberInput(
+                                        id='amount',
+                                        label='Quantia',
+                                        description='Quantidade em BTC',  # noqa: E501
+                                        value=0,
+                                        min=0,
+                                        step=step,
+                                    ),
+                                    # limited
+                                    dmc.Select(
+                                        label='Tipo de Ordem',
+                                        description='Tipo de ordem de compra',  # noqa: E501
+                                        placeholder='Selecione uma opção',  # noqa: E501
+                                        id='limited',
+                                        value='limited',
+                                        data=[
+                                            {
+                                                'value': 'limited',
+                                                'label': 'Limitada',
+                                            },
+                                            {
+                                                'value': 'market',
+                                                'label': 'Mercado',
+                                            },
+                                        ],
+                                        mb=10,
+                                    ),
+                                    # market='BTC-BRL'
+                                    dmc.Select(
+                                        label='Selecione o Mercado',
+                                        placeholder='Selecione uma opção',  # noqa: E501
+                                        id='market-compra',
+                                        value='BTC-BRL',
+                                        data=carregar_opcoes_criptomoedas(),
+                                        mb=10,
+                                    ),
+                                    # botao de compra
+                                    dmc.Button(
+                                        'Comprar?',
+                                        variant='outline',
+                                        id='buy-button',
+                                    ),
+                                    dmc.Text(
+                                        id='buy-button-output',
+                                        size='sm',
+                                        mb=10,
                                     ),
                                 ],
-                                # definindo tamanho fixo
-                                style={'width': '100%'},
-                                shadow='md',
-                                radius='lg',
-                                p='xl',
-                                withBorder=True,
                             ),
                         ],
                     ),
@@ -605,35 +587,35 @@ right_column = html.Div(
     ],
 )
 
-horizontal_panel_group = PanelGroup(
-    id='horizontal_panel_group',
-    children=[
-        Panel(
-            id='panel-1',
-            children=[
-                # vertical_panel_group,
-                left_column,
-            ],
-            defaultSizePercentage=85,
-        ),
-        PanelResizeHandle(
-            html.Div(
-                style={
-                    'backgroundColor': 'white',
-                    'height': '100%',
-                    'width': '5px',
-                }
-            )
-        ),
-        Panel(
-            id='panel-2',
-            children=[
-                right_column,
-            ],
-        ),
-    ],
-    direction='horizontal',
-)
+# horizontal_panel_group = PanelGroup(
+#     id='horizontal_panel_group',
+#     children=[
+#         Panel(
+#             id='panel-1',
+#             children=[
+#                 # vertical_panel_group,
+#                 left_column,
+#             ],
+#             defaultSizePercentage=85,
+#         ),
+#         PanelResizeHandle(
+#             html.Div(
+#                 style={
+#                     'backgroundColor': 'white',
+#                     'height': '100%',
+#                     'width': '5px',
+#                 }
+#             )
+#         ),
+#         Panel(
+#             id='panel-2',
+#             children=[
+#                 right_column,
+#             ],
+#         ),
+#     ],
+#     direction='horizontal',
+# )
 
 theme_toggle = dmc.Switch(
     offLabel=DashIconify(icon='radix-icons:moon', width=20),
@@ -762,12 +744,10 @@ historico_precos = dmc.Paper(
 # Gráficos de Linha, Candlestick e Pizza
 graficos = dmc.Paper(
     children=[
-        dmc.Group(
+        dmc.Stack(
             [
                 dmc.Text('Gráficos', size='lg', fw=700),
-                # dcc.Graph(id='grafico-linha'),
-                # dcc.Graph(id='grafico-candlestick'),
-                # dcc.Graph(id='grafico-pizza'),
+                left_column,
             ],
         )
     ],
@@ -781,34 +761,81 @@ painel_alertas = dmc.Paper(
     dmc.Stack(
         [
             dmc.Text('Painel de Insights e Alertas', size='lg', fw=700),
-            dmc.Text('Configurar alertas personalizados', c='gray'),
-            dmc.NumberInput(
-                id='alerta-preco',
-                label='Alerta de Preço',
-                description='Definir um preço para alerta',
-                value=0,
-                min=0,
-                step=0.01,
-            ),
-            dmc.Button('Ativar Alerta', id='botao-alerta'),
-            dmc.Text('Indicadores de Tendência', c='gray'),
+            # dmc.Text('Configurar alertas personalizados', c='gray'),
+            # dmc.NumberInput(
+            #     id='alerta-preco',
+            #     label='Alerta de Preço',
+            #     description='Definir um preço para alerta',
+            #     value=0,
+            #     min=0,
+            #     step=0.01,
+            # ),
+            # dmc.Button('Ativar Alerta', id='botao-alerta'),
             dmc.CheckboxGroup(
-                id='indicadores-tendencia',
-                label='Indicadores de Tendência',
-                description='Selecione os indicadores de tendência',
+                id='graf-info',
+                label='Plots do Gráfico',
+                description='Selecione informações do gráfico'
+                + 'que deseja mostrar',
                 withAsterisk=True,
                 mb=10,
                 children=dmc.Group(
                     [
-                        dmc.Checkbox(label='Média Móvel', value='sma'),
-                        dmc.Checkbox(label='RSI', value='rsi'),
+                        dmc.Checkbox(
+                            label='Ordens Executadas', value='orders'
+                        ),
+                        dmc.Checkbox(
+                            label='Dataframe do Ticket', value='ticker'
+                        ),
+                        dmc.Checkbox(
+                            label='Gráfico de Velas da Binance',
+                            value='candlestick',
+                        ),
                     ],
                     mt=10,
                 ),
-                value=['sma', 'rsi'],
+                value=['orders', 'ticker', 'candlestick'],
+            ),
+            dmc.CheckboxGroup(
+                id='indicadores-tecnicos',
+                label='Indicadores Técnicos',
+                description='Selecione os indicadores técnicos',
+                withAsterisk=True,
+                mb=10,
+                children=dmc.Group(
+                    [
+                        dmc.Checkbox(
+                            label='Média Móvel Curta', value='short_ma'
+                        ),
+                        dmc.Checkbox(
+                            label='Média Móvel Longa', value='long_ma'
+                        ),
+                        dmc.Checkbox(label='RSI', value='rsi'),
+                        dmc.Checkbox(label='MACD', value='macd'),
+                        dmc.Checkbox(
+                            label='Bandas de Bollinger', value='bbands'
+                        ),
+                        dmc.Checkbox(label='ATR', value='atr'),
+                    ],
+                    mt=10,
+                ),
+                value=['short_ma', 'long_ma'],
             ),
         ],
     ),
+    shadow='md',
+    radius='lg',
+    p='xl',
+)
+
+comprar_vender = dmc.Paper(
+    children=[
+        dmc.Stack(
+            [
+                dmc.Text('Compra e venda', size='lg', fw=700),
+                right_column,
+            ],
+        )
+    ],
     shadow='md',
     radius='lg',
     p='xl',
@@ -823,12 +850,15 @@ layout_dashboard = html.Div(
         dcc.Store(id='df-balance', storage_type='local'),
         dmc.Grid(
             [
-                horizontal_panel_group,
+                dmc.GridCol(painel_alertas, span='auto'),
                 dmc.GridCol(preco_atual, span=4),
+                dmc.GridCol(graficos, span=6),
                 dmc.GridCol(historico_precos, span=4),
-                dmc.GridCol(graficos, span=4),
-                dmc.GridCol(painel_alertas, span=4),
+                dmc.GridCol(comprar_vender, span=2),
             ],
+            justify='space-between',
+            align='stretch',
+            # grow=True,
             gutter='xs',
         ),
     ],
@@ -976,6 +1006,8 @@ def preco_atuais(
     Input('data-recency-candlestick', 'value'),
     Input('df-precos', 'data'),
     Input('df-executed-orders', 'data'),
+    Input('graf-info', 'value'),
+    Input('indicadores-tecnicos', 'value'),
     Input('tabs', 'value'),
     prevent_initial_call=True,
 )
@@ -984,6 +1016,8 @@ def preco_tab(  # noqa: PLR0915
     data_recency_candlestick,
     df,
     executed_orders_df,
+    graf_info,
+    indicadores,
     value,
 ):
     df = pd.DataFrame(df)
@@ -999,202 +1033,189 @@ def preco_tab(  # noqa: PLR0915
     minutes_ago = now - datetime.timedelta(minutes=data_recency)
 
     try:
-        # table = create_table(df)
-        # Criando um gráfico de indicadores para os preços
-        df_now = {
-            'minPrice': df['low'].iloc[-1],
-            'avgPrice': df['avg'].iloc[-1],
-            'maxPrice': df['high'].iloc[-1],
-            'count': len(df),
-            'amountTraded': df['vol'].iloc[-1],
-        }
-        df_prev = {
-            'minPrice': df['low'].iloc[-2]
-            if len(df) > 1
-            else df['low'].iloc[-1],
-            'avgPrice': df['avg'].iloc[-2]
-            if len(df) > 1
-            else df['avg'].iloc[-1],
-            'maxPrice': df['high'].iloc[-2]
-            if len(df) > 1
-            else df['high'].iloc[-1],
-            'count': len(df) - 1 if len(df) > 1 else len(df),
-            'amountTraded': df['vol'].iloc[-2]
-            if len(df) > 1
-            else df['last'].sum(),
-        }
-
-        fig = go.Figure()
-        if df_now['count'] > 0:
-            if df_prev['count'] > 0:
-                # Ultimo preço
-                dash_utils.add_delta_trace(
-                    fig,
-                    'Último Preço',
-                    df['last'].iloc[-1],
-                    df['last'].iloc[-2],
-                    0,
-                    0,
-                )
-                dash_utils.add_delta_trace(
-                    fig,
-                    'Menor Preço 24h',
-                    df_now['minPrice'],
-                    df_prev['minPrice'],
-                    0,
-                    1,
-                )
-                dash_utils.add_delta_trace(
-                    fig,
-                    'Preço médio',
-                    df_now['avgPrice'],
-                    df_prev['avgPrice'],
-                    0,
-                    2,
-                )
-                dash_utils.add_delta_trace(
-                    fig,
-                    'Preço Máximo',
-                    df_now['maxPrice'],
-                    df_prev['maxPrice'],
-                    1,
-                    0,
-                )
-                dash_utils.add_delta_trace(
-                    fig,
-                    'Transações',
-                    df_now['count'],
-                    df_prev['count'],
-                    1,
-                    1,
-                )
-                dash_utils.add_delta_trace(
-                    fig,
-                    'Quantidade Negociada',
-                    df_now['amountTraded'],
-                    df_prev['amountTraded'],
-                    1,
-                    2,
-                )
-            else:
-                dash_utils.add_trace(
-                    fig, 'Último Preço', df['last'].iloc[-1], 0, 0
-                )
-                dash_utils.add_trace(
-                    fig, 'Menor Preço 24h', df_now['minPrice'][0], 0, 1
-                )
-                dash_utils.add_trace(
-                    fig, 'Preço médio', df_now['avgPrice'][0], 0, 2
-                )
-                dash_utils.add_trace(
-                    fig, 'Preço Máximo', df_now['maxPrice'][0], 1, 0
-                )
-                dash_utils.add_trace(
-                    fig, 'Transações', df_now['count'][0], 1, 1
-                )
-                dash_utils.add_trace(
-                    fig,
-                    'Quantidade Negociada',
-                    df_now['amountTraded'][0],
-                    1,
-                    2,
-                )
-            fig.update_layout(
-                grid={'rows': 2, 'columns': 3, 'pattern': 'independent'},
-            )
-        else:
-            fig.update_layout(
-                annotations=[
-                    {
-                        'text': 'No transactions found',
-                        'xref': 'paper',
-                        'yref': 'paper',
-                        'showarrow': False,
-                        'font': {'size': 28},
-                    }
-                ]
-            )
-        # criando o gráfico de candlestick
         fig1 = go.Figure()
 
-        # convertendo o tempo de recência para o formato de intervalo suportado
-        interval_mapping = {
-            '1': '1m',
-            '3': '3m',
-            '5': '5m',
-            '15': '15m',
-            '30': '30m',
-            '60': '1h',
-            '120': '2h',
-            '240': '4h',
-            '360': '6h',
-            '720': '12h',
-            '1440': '1d',
-            '4320': '3d',
-            '10080': '1w',
-            '43200': '1M',
-        }
+        if 'candlestick' in graf_info:
+            # convertendo o tempo de recência para
+            # o formato de intervalo suportado
+            interval_mapping = {
+                '1': '1m',
+                '3': '3m',
+                '5': '5m',
+                '15': '15m',
+                '30': '30m',
+                '60': '1h',
+                '120': '2h',
+                '240': '4h',
+                '360': '6h',
+                '720': '12h',
+                '1440': '1d',
+                '4320': '3d',
+                '10080': '1w',
+                '43200': '1M',
+            }
 
-        intervalo = interval_mapping.get(
-            str(int(data_recency_candlestick)), '1m'
-        )
-
-        df2 = get_klines(interval=intervalo)
-
-        fig1.add_trace(
-            go.Candlestick(
-                x=df2['Kline open time'],
-                open=df2['Open price'],
-                high=df2['High price'],
-                low=df2['Low price'],
-                close=df2['Close price'],
-                name='Api Binance',
+            intervalo = interval_mapping.get(
+                str(int(data_recency_candlestick)), '1m'
             )
-        )
 
-        fig1.add_trace(
-            go.Scatter(
-                x=df['timestamp'],
-                y=df['last'],
-                mode='lines',
-                name='Último Preço',
-                line=dict(color='white', width=1),
-            )
-        )
+            df2 = get_klines(interval=intervalo)
 
-        # adicionando marcadores com as ordens de compra e venda
-        fig1.add_trace(
-            go.Scatter(
-                x=executed_orders_df[executed_orders_df['type'] == 'BUY'][
-                    'time_stamp'
-                ],
-                y=executed_orders_df[executed_orders_df['type'] == 'BUY'][
-                    'price'
-                ],
-                mode='markers',
-                name='BUY Executed Orders',
-                marker=dict(color='orange', size=10.5, symbol='x'),
+            fig1.add_trace(
+                go.Candlestick(
+                    x=df2['Kline open time'],
+                    open=df2['Open price'],
+                    high=df2['High price'],
+                    low=df2['Low price'],
+                    close=df2['Close price'],
+                    name='Api Binance',
+                )
             )
-        )
-        fig1.add_trace(
-            go.Scatter(
-                x=executed_orders_df[executed_orders_df['type'] == 'SELL'][
-                    'time_stamp'
-                ],
-                y=executed_orders_df[executed_orders_df['type'] == 'SELL'][
-                    'price'
-                ],
-                mode='markers',
-                name='SELL Executed Orders',
-                marker=dict(color='green', size=10.5, symbol='x'),
+        if 'ticker' in graf_info:
+            fig1.add_trace(
+                go.Scatter(
+                    x=df['timestamp'],
+                    y=df['last'],
+                    mode='lines',
+                    name='Último Preço',
+                    line=dict(color='white', width=1),
+                )
             )
-        )
+        if 'orders' in graf_info:
+            # adicionando marcadores com as ordens de compra e venda
+            fig1.add_trace(
+                go.Scatter(
+                    x=executed_orders_df[executed_orders_df['type'] == 'BUY'][
+                        'time_stamp'
+                    ],
+                    y=executed_orders_df[executed_orders_df['type'] == 'BUY'][
+                        'price'
+                    ],
+                    mode='markers',
+                    name='BUY Executed Orders',
+                    marker=dict(color='orange', size=10.5, symbol='x'),
+                )
+            )
+            fig1.add_trace(
+                go.Scatter(
+                    x=executed_orders_df[executed_orders_df['type'] == 'SELL'][
+                        'time_stamp'
+                    ],
+                    y=executed_orders_df[executed_orders_df['type'] == 'SELL'][
+                        'price'
+                    ],
+                    mode='markers',
+                    name='SELL Executed Orders',
+                    marker=dict(color='green', size=10.5, symbol='x'),
+                )
+            )
+        # abrindo o arquivo de indicadores.csv
+        df2 = pd.read_csv(INDICADORES_FILE)
+        # Add indicators based on checkbox selection
+        if 'short_ma' in indicadores:
+            fig1.add_trace(
+                go.Scatter(
+                    x=df2['timestamp'],
+                    y=df2['short_ma'],
+                    mode='lines',
+                    name='MA20',
+                    line=dict(color='blue', width=1),
+                )
+            )
+
+        if 'long_ma' in indicadores:
+            fig1.add_trace(
+                go.Scatter(
+                    x=df2['timestamp'],
+                    y=df2['long_ma'],
+                    mode='lines',
+                    name='MA50',
+                    line=dict(color='red', width=1),
+                )
+            )
+
+        if 'rsi' in indicadores:
+            fig1.add_trace(
+                go.Scatter(
+                    x=df2['timestamp'],
+                    y=df2['rsi'],
+                    mode='lines',
+                    name='RSI',
+                    yaxis='y2',
+                    line=dict(color='purple', width=1),
+                )
+            )
+
+        if 'macd' in indicadores:
+            fig1.add_trace(
+                go.Scatter(
+                    x=df2['timestamp'],
+                    y=df2['macd'],
+                    mode='lines',
+                    name='MACD',
+                    yaxis='y3',
+                    line=dict(color='orange', width=1),
+                )
+            )
+
+            fig1.add_trace(
+                go.Scatter(
+                    x=df2['timestamp'],
+                    y=df2['macd_signal'],
+                    mode='lines',
+                    name='Signal',
+                    yaxis='y3',
+                    line=dict(color='cyan', width=1),
+                )
+            )
+
+        if 'bbands' in indicadores:
+            fig1.add_trace(
+                go.Scatter(
+                    x=df2['timestamp'],
+                    y=df2['bb_upper'],
+                    mode='lines',
+                    name='Upper BB',
+                    line=dict(color='gray', width=1),
+                )
+            )
+
+            fig1.add_trace(
+                go.Scatter(
+                    x=df2['timestamp'],
+                    y=df2['bb_middle'],
+                    mode='lines',
+                    name='Middle BB',
+                    line=dict(color='gray', width=1),
+                )
+            )
+
+            fig1.add_trace(
+                go.Scatter(
+                    x=df2['timestamp'],
+                    y=df2['bb_lower'],
+                    mode='lines',
+                    name='Lower BB',
+                    line=dict(color='gray', width=1),
+                )
+            )
+
+        if 'atr' in indicadores:
+            fig1.add_trace(
+                go.Scatter(
+                    x=df2['timestamp'],
+                    y=df2['atr'],
+                    mode='lines',
+                    name='ATR',
+                    yaxis='y4',
+                    line=dict(color='brown', width=1),
+                )
+            )
 
         fig1.update_layout(
             title='BTC-BRL Prices Over Time',
             xaxis_title='Timestamp',
             yaxis_title='Price (BRL)',
-            template='plotly_dark',
             xaxis_rangeslider_visible=True,
             xaxis_range=[
                 minutes_ago.strftime('%Y-%m-%d %H:%M:%S'),
@@ -1204,18 +1225,14 @@ def preco_tab(  # noqa: PLR0915
         return [
             html.Div(
                 children=[
-                    dcc.Graph(figure=fig, mathjax=True),
-                ],
-            ),
-            html.Div(
-                children=[
                     html.Hr(),
-                    dcc.Graph(figure=fig1, mathjax=True),
+                    dcc.Graph(
+                        figure=fig1,
+                        mathjax=True,
+                        id={'type': 'graph', 'index': 'scatter'},
+                    ),
                 ],
             ),
-            # html.Div(
-            #     children=[table],
-            # ),
         ]
     except Exception as e:
         tb = traceback.format_exc()
@@ -1443,7 +1460,11 @@ def ordens_tab(value, executed_orders_df, balance_df, df_precos):
             )
             return html.Div(
                 children=[
-                    dcc.Graph(figure=fig, mathjax=True),
+                    dcc.Graph(
+                        figure=fig,
+                        mathjax=True,
+                        id={'type': 'graph', 'index': 'pie'},
+                    ),
                     html.Hr(),
                     table,
                 ],
@@ -1622,6 +1643,26 @@ def carregar_pagina(pathname):
 def switch_theme(_, theme):
     new_theme = 'dark' if theme == 'light' else 'light'
     return new_theme, new_theme
+
+
+@callback(
+    Output({'type': 'graph', 'index': ALL}, 'figure'),
+    Input('mantine-provider', 'forceColorScheme'),
+    State({'type': 'graph', 'index': ALL}, 'id'),
+)
+def update_figure(theme, ids):
+    template = (
+        pio.templates['mantine_light']
+        if theme == 'light'
+        else pio.templates['mantine_dark']
+    )
+    patched_figures = []
+    for i in ids:
+        patched_fig = Patch()
+        patched_fig['layout']['template'] = template
+        patched_figures.append(patched_fig)
+
+    return patched_figures
 
 
 # Callback para abrir o navbar

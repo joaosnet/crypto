@@ -2,6 +2,7 @@ import json
 import time
 
 import pandas as pd
+from rich import print
 
 try:
     from crypto.api_bitpreco import (
@@ -82,10 +83,12 @@ def main():
 
         except (Exception, KeyboardInterrupt):
             if KeyboardInterrupt:
-                print('Saindo...')
+                print(
+                    ':rotating_light: [bold magenta]Saindo...[/bold magenta]'
+                )
                 break
             else:
-                print('Erro')
+                print('[bold magenta]ErroWorld[/bold magenta]')
                 continue
 
 

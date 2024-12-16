@@ -12,7 +12,7 @@ dependencies = [
     "sympy >=1.13.2",
     "dash-dangerously-set-inner-html >=0.0.2",
     "antlr4-python3-runtime ==4.11",
-    "dash-mantine-components >=0.14.4",
+    "dash-mantine-components==0.15.1",
     "dash-iconify >=0.1.2",
     "array-to-latex >=0.92",
     "dash-resizable-panels >=0.1.0",

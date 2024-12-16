@@ -466,7 +466,7 @@ requires-dist = [
     { name = "dash", specifier = ">=2.17.1" },
     { name = "dash-dangerously-set-inner-html", specifier = ">=0.0.2" },
     { name = "dash-iconify", specifier = ">=0.1.2" },
-    { name = "dash-mantine-components", specifier = ">=0.14.4" },
+    { name = "dash-mantine-components", specifier = "==0.15.1" },
     { name = "dash-resizable-panels", specifier = ">=0.1.0" },
     { name = "httpx", specifier = ">=0.27.2" },
     { name = "mitosheet", specifier = ">=0.2.2" },
@@ -547,14 +547,14 @@ wheels = [
 
 [[package]]
 name = "dash-mantine-components"
-version = "0.14.6"
+version = "0.15.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dash" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b3/6d/3d215645cdd5b7720919c741a7845d6ba4e71d18d43bfb554a4994574aa2/dash_mantine_components-0.14.6.tar.gz", hash = "sha256:94df1dc801df1e576e18ec3587437e1fae140f41ede5f4a9d313d79a97018089", size = 952142 }
+sdist = { url = "https://files.pythonhosted.org/packages/e9/83/0f687d8e96c020875a0bbf69757675b3b02c0087b813b3a1298cc54eb8e2/dash_mantine_components-0.15.1.tar.gz", hash = "sha256:bb24153af09ccc42972af397101ee62718ebe2bbf29fa7ed33c02997059352bd", size = 916594 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0f/72/6c5644ba078dfea16fee0b387d58d70a1a3f6dc80f53387829ec8e311317/dash_mantine_components-0.14.6-py3-none-any.whl", hash = "sha256:8ceb07cb57e2f5038b8da40ae7618156510336452648bf5d4bcb468459bce49b", size = 1252218 },
+    { url = "https://files.pythonhosted.org/packages/6e/b5/984de836c4a5e24c29e18b00f51fcdb44f77025221ecd0d7da28ff34532f/dash_mantine_components-0.15.1-py3-none-any.whl", hash = "sha256:974792e1973144b56d286a50ca55bdfc5d601c174dd7cc4641a1d4bcd81e339e", size = 1224192 },
 ]
 
 [[package]]

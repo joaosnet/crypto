@@ -205,6 +205,9 @@ def graf_preco_atuais(  # noqa: PLR0915
             )
         return dcc.Graph(
             figure=fig,
+            id={'type': 'graph', 'index': 'preco_atuais'},
         )
     except:  # noqa: E722
-        return dcc.Graph()
+        return dcc.Graph(
+            id={'type': 'graph', 'index': 'preco_atuais'},
+        )

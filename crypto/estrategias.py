@@ -37,9 +37,9 @@ except ImportError:
     )
 
 # Configuração do logger sem as requisições HTTP
-FORMAT = "%(message)s"
+FORMAT = '%(message)s'
 logging.basicConfig(
-    level="NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
+    level='NOTSET', format=FORMAT, datefmt='[%X]', handlers=[RichHandler()]
 )
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,9 @@ RSI_OVERSOLD = 30  # Limite inferior do RSI para compra
 
 # Configurações adicionais
 TRADE_HISTORY_FILE = CAMINHO + '/trade_history.json'
+INDICADORES_FILE = CAMINHO + '/indicadores.csv'
+SINAIS_FILE = CAMINHO + '/sinais.csv'
+INTERVAL_FILE = CAMINHO + '/interval.json'
 BACKTEST_DAYS = 30
 MAX_DAILY_TRADES = 5
 
@@ -67,6 +70,33 @@ def bot_msg(levelname: str, message: str):
     trade_data = f'{timestamp};{levelname};{message}\n'
     with open(f'{CAMINHO}/log.csv', 'a', encoding='utf-8') as f:
         f.write(trade_data)
+
+
+def get_interval():
+    interval_mapping = {
+        '1': '1m',
+        '3': '3m',
+        '5': '5m',
+        '15': '15m',
+        '30': '30m',
+        '60': '1h',
+        '120': '2h',
+        '240': '4h',
+        '360': '6h',
+        '720': '12h',
+        '1440': '1d',
+        '4320': '3d',
+        '10080': '1w',
+        '43200': '1M',
+    }
+
+    try:
+        with open(INTERVAL_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            data_recency = data.get('interval', '1')
+            return interval_mapping.get(str(int(data_recency)), '1m')
+    except FileNotFoundError:
+        return '1m'  # Default value of 1 minute if file doesn't exist
 
 
 class TradeHistory:
@@ -100,7 +130,7 @@ class TradeHistory:
 
 
 # Função para obter dados históricos de preços da Binance
-def get_price_history(symbol='BTCBRL', interval='1h', limit=100):
+def get_price_history(symbol='BTCBRL', interval=get_interval(), limit=100):
     """
     Obtém o histórico de preços da Binance para o símbolo especificado.
     """
@@ -133,6 +163,9 @@ def calculate_indicators(df):
     df['bb_upper'], df['bb_middle'], df['bb_lower'] = ta.BBANDS(df['close'])
     df['atr'] = ta.ATR(df['high'], df['low'], df['close'])
 
+    # Salvar indicadores em arquivo CSV
+    df.to_csv(INDICADORES_FILE, index=False)
+
     return df
 
 
@@ -153,6 +186,9 @@ def generate_signals(df):
 
     # Calcular mudanças de posição
     df['position'] = df['signal'].diff()
+
+    # salvar sinais em arquivo CSV
+    df.to_csv(SINAIS_FILE, index=False)
 
     return df
 
