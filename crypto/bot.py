@@ -26,6 +26,8 @@ BALANCE_FILE = CAMINHO + '/balance.csv'
 ORDERS_FILE = CAMINHO + '/executed_orders.csv'
 INTERVAL_FILE = CAMINHO + '/interval.json'
 
+# console = console.Console()
+
 
 def save_price_to_csv(ticker_json):
     df_precos = pd.read_csv(PRICE_FILE)
@@ -86,10 +88,11 @@ def main():
                 print(
                     ':rotating_light: [bold magenta]Saindo...[/bold magenta]'
                 )
+                # console.print_exception()
                 break
             else:
                 print('[bold magenta]ErroWorld[/bold magenta]')
-                continue
+                break
 
 
 if __name__ == '__main__':
