@@ -1,11 +1,14 @@
 import json
+from typing import Any, Dict, Optional
 
 import httpx
+from rich import print
 
 try:
     from crypto.segredos import CAMINHO, auth_token
 except ImportError:
     from segredos import CAMINHO, auth_token
+import re
 
 publicTradingApi = 'https://api.bitpreco.com/v1/trading/balance'
 
@@ -48,11 +51,84 @@ def get_coinpair():
         return 'BTC-BRL'
 
 
-def CoinTraderMonitor():
-    response = httpx.get('https://cointradermonitor.com/api/pbb/v1/ticker')
-    data = response.json()
-    print(f'last: {data["last"]}, volume24h: {data["volume24h"]}')
-    return data
+def fetch_bitpreco_history(
+    symbol: str,
+    resolution: str,
+    time_range: Dict[str, int],
+    countback: int,
+    currency_code: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Busca dados históricos de preços da API da BitPreço.
+
+    Parâmetros:
+        symbol (str): Par de negociação, por exemplo, 'BTC_BRL'.
+        resolution (str): Resolução do período, por exemplo, '1D'.
+        from_timestamp (int): Timestamp de início
+        (em segundos desde a época Unix).
+        to_timestamp (int): Timestamp de término
+        (em segundos desde a época Unix).
+        countback (int): Número de registros anteriores.
+        currency_code (str): Código da moeda, por exemplo, 'BRL'.
+
+    Retorna:
+        dict: Dados históricos de preços se a requisição for bem-sucedida.
+        None: Se ocorrer um erro durante a requisição.
+    """
+    url = 'https://api.bitpreco.com/tradingview/history'
+
+    headers = {
+        'accept': '*/*',
+        'accept-language': 'pt-BR,pt;q=0.8',
+        'origin': 'https://market.bitypreco.com',
+        'referer': 'https://market.bitypreco.com/',
+        'sec-ch-ua': '"Not A(Brand";v="8", "Chromium";v="132", "Brave";v="132"',  # noqa: E501
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'cross-site',
+        'sec-gpc': '1',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',  # noqa: E501
+    }
+
+    params = {
+        'symbol': symbol,
+        'resolution': resolution,
+        'from': time_range['from'],
+        'to': time_range['to'],
+        'countback': countback,
+        'currencyCode': currency_code,
+    }
+
+    try:
+        response = httpx.get(url, params=params, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        return data
+    except httpx.RequestError as exc:
+        print(f'[red]Erro na requisição:[/red] {exc}')
+    except httpx.HTTPStatusError as exc:
+        try:
+            html_content = exc.response.text
+            print('[red]Erro HTTP:[/red]', exc.response.status_code)
+            print('[yellow]Conteúdo da página:[/yellow]')
+            # Remove HTML tags for cleaner display
+            clean_text = re.sub('<[^<]+?>', '', html_content)
+            clean_text = '\n'.join(
+                line.strip()
+                for line in clean_text.splitlines()
+                if line.strip()
+            )
+            print(clean_text)
+        except Exception as e:
+            print(f'[red]Erro ao processar resposta:[/red] {e}')
+    except ValueError:
+        print('[red]Erro ao decodificar a resposta JSON.[/red]')
+    except Exception as exc:
+        print(f'[red]Erro inesperado:[/red] {exc}')
+
+    return None
 
 
 def Ticker(coinpar='all-brl'):

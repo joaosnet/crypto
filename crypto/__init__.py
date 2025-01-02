@@ -5,9 +5,11 @@ import dash_mantine_components as dmc
 import psutil
 from dash import Dash, _dash_renderer  # noqa: PLC2701
 from mitosheet.mito_dash.v1 import activate_mito
+from rich.traceback import install
 
 from crypto.segredos import SECRET_KEY
 
+install(show_locals=True)
 _dash_renderer._set_react_version('18.2.0')
 
 # Caminhos relativos para o bot e o executável Python do ambiente virtual

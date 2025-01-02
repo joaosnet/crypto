@@ -1,3 +1,4 @@
+import dash_mantine_components as dmc
 import pandas as pd
 import plotly.graph_objects as go
 from dash import dash_table, dcc
@@ -210,4 +211,156 @@ def graf_preco_atuais(  # noqa: PLR0915
     except:  # noqa: E722
         return dcc.Graph(
             id={'type': 'graph', 'index': 'preco_atuais'},
+        )
+
+
+# Grupo de preços atuais da moeda selecionada
+def bar_precos_atuais(
+    data_recency=None,
+    df=None,
+    executed_orders_df=None,
+):
+    try:
+        df = pd.DataFrame(df)
+        executed_orders_df = pd.DataFrame(executed_orders_df)
+
+        data_recency = float(data_recency) if data_recency else 3
+
+        if len(df) > 0:
+            df_now = {
+                'minPrice': df['low'].iloc[-1],
+                'avgPrice': df['avg'].iloc[-1],
+                'maxPrice': df['high'].iloc[-1],
+                'count': len(df),
+                'amountTraded': df['vol'].iloc[-1],
+                'lastPrice': df['last'].iloc[-1],
+            }
+            percent_change = df['var'].iloc[-1]
+            change_color = 'red' if percent_change < 0 else 'green'
+
+        return dmc.Group(
+            [
+                dmc.Stack(
+                    [
+                        dmc.Text('Volume 24hs', size='sm', c='gray'),
+                        dmc.Text(
+                            f'BTC {df_now["amountTraded"]:.8f}',
+                            size='sm',
+                            fw=500,
+                        ),
+                    ],
+                    gap='xs',
+                ),
+                dmc.Stack(
+                    [
+                        dmc.Text('Último Preço', size='sm', c='gray'),
+                        dmc.Text(
+                            f'R$ {df_now["lastPrice"]:,.2f}', size='sm', fw=500
+                        ),
+                    ],
+                    gap='xs',
+                ),
+                dmc.Stack(
+                    [
+                        dmc.Text('Menor', size='sm', c='gray'),
+                        dmc.Text(
+                            f'R$ {df_now["minPrice"]:,.2f}', size='sm', fw=500
+                        ),
+                    ],
+                    gap='xs',
+                ),
+                dmc.Stack(
+                    [
+                        dmc.Text('Maior', size='sm', c='gray'),
+                        dmc.Text(
+                            f'R$ {df_now["maxPrice"]:,.2f}', size='sm', fw=500
+                        ),
+                    ],
+                    gap='xs',
+                ),
+                dmc.Stack(
+                    [
+                        dmc.Text('Variação', size='sm', c='gray'),
+                        dmc.Text(
+                            f'{percent_change:.2f}%',
+                            size='sm',
+                            fw=500,
+                            c=change_color,
+                        ),
+                    ],
+                    gap='xs',
+                ),
+            ],
+            align='center',
+            justify='center',
+            gap='lg',
+        )
+    except Exception:
+        return dmc.Group(
+            [
+                dmc.Group(
+                    [
+                        dmc.Stack(
+                            [
+                                dmc.Text('Volume 24hs', size='sm', c='gray'),
+                                dmc.Loader(
+                                    color='red', size='xs', variant='oval'
+                                ),
+                            ],
+                            gap='xs',
+                            justify='center',
+                            align='flex-start',
+                        ),
+                        dmc.Stack(
+                            [
+                                dmc.Text('Último Preço', size='sm', c='gray'),
+                                dmc.Loader(
+                                    color='red', size='xs', variant='oval'
+                                ),
+                            ],
+                            gap='xs',
+                            justify='center',
+                            align='flex-start',
+                        ),
+                        dmc.Stack(
+                            [
+                                dmc.Text('Menor', size='sm', c='gray'),
+                                dmc.Loader(
+                                    color='red', size='xs', variant='oval'
+                                ),
+                            ],
+                            gap='xs',
+                            justify='center',
+                            align='flex-start',
+                        ),
+                        dmc.Stack(
+                            [
+                                dmc.Text('Maior', size='sm', c='gray'),
+                                dmc.Loader(
+                                    color='red', size='xs', variant='oval'
+                                ),
+                            ],
+                            gap='xs',
+                            justify='center',
+                            align='flex-start',
+                        ),
+                        dmc.Stack(
+                            [
+                                dmc.Text('Variação', size='sm', c='gray'),
+                                dmc.Loader(
+                                    color='red', size='xs', variant='oval'
+                                ),
+                            ],
+                            gap='xs',
+                            justify='center',
+                            align='flex-start',
+                        ),
+                    ],
+                    align='center',
+                    justify='center',
+                    gap='lg',
+                ),
+            ],
+            gap='sm',
+            align='center',
         )

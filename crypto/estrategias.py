@@ -1,6 +1,7 @@
 # estrategias.py
 import json
 import logging
+import time
 import traceback
 from datetime import datetime
 from typing import Dict, Optional
@@ -8,6 +9,7 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 import talib as ta
+from rich import console
 from rich.logging import RichHandler
 
 try:
@@ -39,17 +41,18 @@ except ImportError:
 # Configuração do logger sem as requisições HTTP
 FORMAT = '%(message)s'
 logging.basicConfig(
-    level='NOTSET', format=FORMAT, datefmt='[%X]', handlers=[RichHandler()]
+    level=logging.INFO, format=FORMAT, datefmt='[%X]', handlers=[RichHandler()]
 )
 logger = logging.getLogger(__name__)
 
+console = console.Console()
 
 # Parâmetros Globais
 coinpair = get_coinpair()
 profitability = 1.05  # Margem de lucro desejada (5%)
 risk_per_trade = 0.10  # Arriscar 10% do saldo disponível por operação
-short_window = 7  # Período da média móvel de curto prazo
-long_window = 21  # Período da média móvel de longo prazo
+short_window = 5  # Período da média móvel de curto prazo
+long_window = 10  # Período da média móvel de longo prazo
 SIGNAL_BUY = 1  # Alterar de 2 para 1
 SIGNAL_SELL = -1  # Alterar de -2 para -1
 STOP_LOSS = 0.95  # Limite para stop-loss (5% abaixo do preço de compra)
@@ -60,6 +63,7 @@ TRADE_HISTORY_FILE = CAMINHO + '/trade_history.json'
 INDICADORES_FILE = CAMINHO + '/indicadores.csv'
 SINAIS_FILE = CAMINHO + '/sinais.csv'
 INTERVAL_FILE = CAMINHO + '/interval.json'
+BTCBRL_FILE = CAMINHO + '/btc_brl_full.csv'
 BACKTEST_DAYS = 30
 MAX_DAILY_TRADES = 5
 
@@ -70,33 +74,6 @@ def bot_msg(levelname: str, message: str):
     trade_data = f'{timestamp};{levelname};{message}\n'
     with open(f'{CAMINHO}/log.csv', 'a', encoding='utf-8') as f:
         f.write(trade_data)
-
-
-def get_interval():
-    interval_mapping = {
-        '1': '1m',
-        '3': '3m',
-        '5': '5m',
-        '15': '15m',
-        '30': '30m',
-        '60': '1h',
-        '120': '2h',
-        '240': '4h',
-        '360': '6h',
-        '720': '12h',
-        '1440': '1d',
-        '4320': '3d',
-        '10080': '1w',
-        '43200': '1M',
-    }
-
-    try:
-        with open(INTERVAL_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            data_recency = data.get('interval', '1')
-            return interval_mapping.get(str(int(data_recency)), '1m')
-    except FileNotFoundError:
-        return '1m'  # Default value of 1 minute if file doesn't exist
 
 
 class TradeHistory:
@@ -130,19 +107,36 @@ class TradeHistory:
 
 
 # Função para obter dados históricos de preços da Binance
-def get_price_history(symbol='BTCBRL', interval=get_interval(), limit=100):
+def get_price_history(symbol='BTCBRL', interval='1m', limit=1000):
     """
     Obtém o histórico de preços da Binance para o símbolo especificado.
     """
     try:
-        df = get_klines(symbol=symbol, interval=interval, limit=limit)
-        df['timestamp'] = pd.to_datetime(df['Kline open time'])
-        df = df.rename(columns={'Close price': 'close'})
-        df = df.rename(columns={'High price': 'high'})
-        df = df.rename(columns={'Low price': 'low'})
+        df = pd.read_csv(BTCBRL_FILE)
+        klines = get_klines(
+            symbol=symbol,
+            interval=interval,
+            limit=limit,
+        )
+        # adicionando os novos dados ao dataframe
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        klines['timestamp'] = pd.to_datetime(klines['Kline open time'])
+        klines = klines.rename(
+            columns={
+                'Close price': 'close',
+                'High price': 'high',
+                'Low price': 'low',
+            }
+        )
+        # para combinar os dataframes, comparo as datas da coluna timestamp
+        # e vejo quais não incluir do klines
+        df = df[~df['timestamp'].isin(klines['timestamp'])]
+        # concateno os dataframes
+        df = pd.concat([df, klines], ignore_index=True)
         return df
     except Exception as e:
-        logger.error(f'Erro ao obter histórico de preços: {e}', exc_info=True)
+        logger.error(f'Erro ao obter histórico de preços: {e}')
+        console.print_exception()
         return None
 
 
@@ -156,6 +150,8 @@ def calculate_indicators(df):
     # Médias móveis
     df['short_ma'] = ta.SMA(df['close'], timeperiod=short_window)
     df['long_ma'] = ta.SMA(df['close'], timeperiod=long_window)
+    df['MA20'] = ta.SMA(df['close'], timeperiod=20)
+    df['MA200'] = ta.SMA(df['close'], timeperiod=200)
 
     # Indicadores adicionais
     df['rsi'] = ta.RSI(df['close'], timeperiod=14)
@@ -163,32 +159,49 @@ def calculate_indicators(df):
     df['bb_upper'], df['bb_middle'], df['bb_lower'] = ta.BBANDS(df['close'])
     df['atr'] = ta.ATR(df['high'], df['low'], df['close'])
 
-    # Salvar indicadores em arquivo CSV
-    df.to_csv(INDICADORES_FILE, index=False)
-
     return df
 
 
 # Função para gerar sinais de compra/venda usando indicadores técnicos
 def generate_signals(df):
     """
-    Gera sinais de compra e venda baseados
-    no cruzamento de médias móveis e RSI.
+    Gera sinais de compra e venda baseados em múltiplos indicadores.
     """
     df = df.copy()
     df['signal'] = 0
 
-    # Criar máscara de condições
-    conditions = (df['short_ma'] > df['long_ma']) & (df['rsi'] < RSI_OVERSOLD)
+    # Condições de Compra
+    buy_conditions = (
+        (df['short_ma'] > df['long_ma'])
+        | (df['short_ma'] > df['MA20'])
+        | (df['short_ma'] > df['MA200'])
+    ) & (df['rsi'] <= RSI_OVERSOLD)
 
-    # Aplicar sinal apenas onde as condições são verdadeiras
-    df['signal'] = np.where(conditions, SIGNAL_BUY, 0)
+    # Condições de Venda
+    sell_conditions = (
+        (df['short_ma'] < df['long_ma'])
+        & (df['rsi'] >= 70)  # Sobrecomprado
+        & (
+            (df['close'] < df['bb_lower'])  # Preço abaixo da banda inferior
+            | (df['macd'] < df['macd_signal'])  # Cruzamento MACD
+        )
+    )
 
-    # Calcular mudanças de posição
-    df['position'] = df['signal'].diff()
+    # Aplicar sinais
+    df['signal'] = np.where(
+        buy_conditions, SIGNAL_BUY, np.where(sell_conditions, SIGNAL_SELL, 0)
+    )
 
-    # salvar sinais em arquivo CSV
-    df.to_csv(SINAIS_FILE, index=False)
+    # Calcular mudanças de posição e preencher NaN inicial
+    df['position'] = df['signal'].diff().fillna(0)
+
+    # Adicionar validação
+    assert df['position'].isin([1, 0, -1]).all(), (
+        'Valores de posição inválidos detectados'
+    )
+
+    # Salvar sinais
+    df.to_csv(BTCBRL_FILE, index=False)
 
     return df
 
@@ -226,7 +239,7 @@ def execute_trade(ticker_json, balance):
     Executa operações com melhor gerenciamento de risco
     """
     try:
-        risk_per_trade = 0.10
+        risk_per_trade = 0.25
         trade_executed = False
         trade_history = TradeHistory()
         current_price = float(ticker_json['last'])
@@ -236,7 +249,7 @@ def execute_trade(ticker_json, balance):
         ):
             return
 
-        df = get_price_history(limit=100)
+        df = get_price_history()
         if df is None or df.empty:
             logger.warning('Dados históricos não disponíveis')
             return
@@ -250,18 +263,22 @@ def execute_trade(ticker_json, balance):
         bot_msg(
             'INFO', f'Tendência atual: {trend}, Fator de risco: {risk_factor}'
         )
+        logging.warning(
+            f'Tendência atual: {trend}, Fator de risco: {risk_factor}'
+        )
         # Ajusta volume baseado no risco
         adjusted_risk = risk_per_trade * risk_factor
         risk_per_trade = min(adjusted_risk, 0.2)
         # Obter o último sinal gerado
         last_signal = df['position'].iloc[-1]
         last_price = ticker_json['last']
-        open_orders = OpenOrders(coinpair).json()
+        # open_orders = OpenOrders(coinpair).json()
 
         # Verificar ordens abertas
-        if open_orders:
-            bot_msg('INFO', 'Existem ordens abertas. Aguardando execução.')
-            return
+        # if open_orders:
+        #     bot_msg('INFO', 'Existem ordens abertas. Aguardando execução.')
+        #     logging.warning('Existem ordens abertas. Aguardando execução.')
+        #     time.sleep(30)
 
         # Verificar saldo disponível
         brl_balance = balance.get('BRL', 0)
@@ -274,13 +291,20 @@ def execute_trade(ticker_json, balance):
             price = last_price
 
             # Executar compra
-            # resposta_compra = Buy(
-            #     price=price, volume=amount, limited=True, market=coinpair
-            # )
-            resposta_compra = None
+            resposta_compra = Buy(
+                price=price,
+                volume=amount,
+                amount=amount,
+                limited=True,
+                market=coinpair,
+            )
+            # resposta_compra = None
             trade_type = 'Compra'
-            trade_executed = True
+            # trade_executed = True
             bot_msg('INFO', f'Compra executada: {resposta_compra}')
+            console.print(
+                f':four_leaf_clover: [bold green]Compra executada:[/bold green] {resposta_compra}'
+            )
 
         # Estratégia de Venda (Take Profit e Stop Loss)
         elif last_signal == SIGNAL_SELL and btc_balance > 0:
@@ -293,30 +317,38 @@ def execute_trade(ticker_json, balance):
 
             # Condição de Take Profit ou Stop Loss
             if last_price >= take_profit:
-                # resposta_venda = Sell(
-                #     price=take_profit,
-                #     volume=amount,
-                #     limited=True,
-                #     market=coinpair,
-                # )
-                resposta_venda = None
+                resposta_venda = Sell(
+                    price=take_profit,
+                    volume=amount,
+                    amount=amount,
+                    limited=True,
+                    market=coinpair,
+                )
+                # resposta_venda = None
                 trade_type = 'Venda (Take Profit)'
                 # trade_executed = True
                 bot_msg(
                     'INFO', f'Venda executada (Take Profit): {resposta_venda}'
                 )
+                console.print(
+                    f':four_leaf_clover: [bold yellow]Venda executada (Take Profit)[/bold yellow]: {resposta_venda}'
+                )
             elif last_price <= stop_loss_price:
-                # resposta_venda = Sell(
-                #     price=stop_loss_price,
-                #     volume=amount,
-                #     limited=True,
-                #     market=coinpair,
-                # )
-                resposta_venda = None
+                resposta_venda = Sell(
+                    price=stop_loss_price,
+                    volume=amount,
+                    amount=amount,
+                    limited=True,
+                    market=coinpair,
+                )
+                # resposta_venda = None
                 trade_type = 'Venda (Stop Loss)'
                 # trade_executed = True
                 bot_msg(
                     'INFO', f'Venda executada (Stop Loss): {resposta_venda}'
+                )
+                console.print(
+                    f':four_leaf_clover: [bold blue]Venda executada (Stop Loss)[/bold blue]: {resposta_venda}'
                 )
             else:
                 bot_msg('INFO', 'Preço não atingiu limite de venda.')
@@ -368,12 +400,3 @@ def calculate_risk_factor(df: pd.DataFrame) -> float:
         risk_factor *= 0.8
 
     return max(0.3, min(risk_factor, 1.0))
-
-
-# Exemplo de uso
-# if __name__ == '__main__':
-#     # Supondo que temos funções para obter o ticker e o balance
-#     ticker_json = Ticker(market=coinpair).json()  # Exemplo de preço atual
-#     balance = Balance().json()  # Exemplo de saldo
-
-#     execute_trade(ticker_json, balance)

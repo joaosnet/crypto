@@ -4,6 +4,7 @@ import json
 import traceback
 
 import dash_mantine_components as dmc
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
@@ -14,13 +15,16 @@ from dash_iconify import DashIconify
 
 # from dash_resizable_panels import Panel, PanelGroup, PanelResizeHandle
 from mitosheet.mito_dash.v1 import Spreadsheet, mito_callback
+from plotly.subplots import make_subplots
 
 from crypto import app, dash_utils
 from crypto.api_binance import get_klines
 from crypto.api_bitpreco import Buy, Sell, carregar_opcoes_criptomoedas
 from crypto.bot import get_interval
-from crypto.componentes_personalizados import graf_preco_atuais
-from crypto.estrategias import INDICADORES_FILE
+from crypto.componentes_personalizados import (
+    bar_precos_atuais,
+)
+from crypto.estrategias import BTCBRL_FILE
 
 try:
     from crypto.segredos import CAMINHO
@@ -635,6 +639,11 @@ header = dmc.Group(
         dmc.Burger(id='burger-button', opened=False),
         html.Img(src=app.get_asset_url('fotos_site/logo.png'), width=40),
         dmc.Text('Painel de Criptomoedas', size='xl', fw=700),
+        # Grupo de preços atuais da moeda selecionada
+        html.Div(
+            [bar_precos_atuais()],
+            id='bar-precos-atuais',
+        ),
         dmc.Switch(
             offLabel=DashIconify(icon='radix-icons:moon', width=20),
             onLabel=DashIconify(icon='radix-icons:sun', width=20),
@@ -653,26 +662,26 @@ header = dmc.Group(
 )
 
 # Seção de Preços Atuais com variação 24h e ícones
-preco_atual = dmc.Paper(
-    dmc.Stack([
-        html.Div(
-            children=[
-                dmc.Text('Preços Atuais', size='lg', fw=700),
-                html.Hr(),
-                dmc.Skeleton(
-                    visible=False,
-                    id='precos-at',
-                    children=graf_preco_atuais(),
-                    mb=10,
-                ),
-            ],
-            style={'padding': '10px'},
-        )
-    ]),
-    shadow='md',
-    radius='lg',
-    p='xl',
-)
+# preco_atual = dmc.Paper(
+#     dmc.Stack([
+#         html.Div(
+#             children=[
+#                 dmc.Text('Preços Atuais', size='lg', fw=700),
+#                 html.Hr(),
+#                 dmc.Skeleton(
+#                     visible=False,
+#                     id='precos-at',
+#                     children=graf_preco_atuais(),
+#                     mb=10,
+#                 ),
+#             ],
+#             style={'padding': '10px'},
+#         )
+#     ]),
+#     shadow='md',
+#     radius='lg',
+#     p='xl',
+# )
 
 # Histórico de preços e tabela com botão de exportação
 historico_precos = dmc.Paper(
@@ -790,10 +799,14 @@ painel_alertas = dmc.Paper(
                             label='Gráfico de Velas da Binance',
                             value='candlestick',
                         ),
+                        dmc.Checkbox(
+                            label='Mostrar Intervalo de Barras',
+                            value='rangeslider',
+                        ),
                     ],
                     mt=10,
                 ),
-                value=['orders', 'ticker', 'candlestick'],
+                value=['candlestick'],
             ),
             dmc.CheckboxGroup(
                 id='indicadores-tecnicos',
@@ -804,21 +817,26 @@ painel_alertas = dmc.Paper(
                 children=dmc.Group(
                     [
                         dmc.Checkbox(
-                            label='Média Móvel Curta', value='short_ma'
+                            label='Média Móvel 5 dias', value='short_ma'
                         ),
                         dmc.Checkbox(
-                            label='Média Móvel Longa', value='long_ma'
+                            label='Média Móvel 10 dias', value='long_ma'
                         ),
+                        dmc.Checkbox(
+                            label='Média Móvel 20 dias', value='MA20'
+                        ),
+                        dmc.Checkbox(label='Múltiplo de Mayer', value='MA200'),
                         dmc.Checkbox(label='RSI', value='rsi'),
                         dmc.Checkbox(label='MACD', value='macd'),
                         dmc.Checkbox(
                             label='Bandas de Bollinger', value='bbands'
                         ),
                         dmc.Checkbox(label='ATR', value='atr'),
+                        dmc.Checkbox(label='Sinais', value='sinais'),
                     ],
                     mt=10,
                 ),
-                value=['short_ma', 'long_ma'],
+                value=['short_ma', 'long_ma', 'rsi', 'sinais'],
             ),
         ],
     ),
@@ -850,13 +868,14 @@ layout_dashboard = html.Div(
         dcc.Store(id='df-balance', storage_type='local'),
         dmc.Grid(
             [
-                dmc.GridCol(painel_alertas, span='auto'),
-                dmc.GridCol(preco_atual, span=4),
+                dmc.GridCol(painel_alertas, span=2),
+                dmc.GridCol(controle_tempo, span=2),
+                # dmc.GridCol(preco_atual, span=4),
                 dmc.GridCol(graficos, span=6),
                 dmc.GridCol(historico_precos, span=4),
                 dmc.GridCol(comprar_vender, span=2),
             ],
-            justify='space-between',
+            justify='space-around',
             align='stretch',
             # grow=True,
             gutter='xs',
@@ -872,12 +891,38 @@ layout_pagina = html.Div(
     ],
 )
 
+Navbar = dmc.AppShellNavbar(
+    children=[
+        dmc.NavLink(
+            label='Dashboard',
+            leftSection=DashIconify(icon='mdi:home', height=16),
+            href='/',
+            active=True,
+        ),
+        dmc.NavLink(
+            label='Histórico de Preços',
+            leftSection=DashIconify(icon='mdi:chart-line', height=16),
+            href='/historico-precos',
+        ),
+        dmc.NavLink(
+            label='Comprar e Vender',
+            leftSection=DashIconify(icon='mdi:cart', height=16),
+            href='/comprar-vender',
+        ),
+        dmc.NavLink(
+            label='Configurações',
+            leftSection=DashIconify(icon='mdi:cog', height=16),
+            href='/configuracoes',
+        ),
+    ],
+    id='app-shell-navbar',
+)
+
+
 appshell = dmc.AppShell(
     [
         dmc.AppShellHeader(header, px=25, py=10),
-        dmc.AppShellNavbar(
-            controle_tempo,
-        ),
+        Navbar,
         dmc.AppShellMain(layout_pagina),
     ],
     header={'height': 70},
@@ -981,7 +1026,7 @@ def update_tab_icons(df_precos, df_executed_orders):
 
 # Callback para adicionar o conteúdo da página dentro do tab Preços
 @app.callback(
-    Output('precos-at', 'children'),
+    Output('bar-precos-atuais', 'children'),
     Input('data-recency', 'value'),
     Input('df-precos', 'data'),
     Input('df-executed-orders', 'data'),
@@ -992,7 +1037,7 @@ def preco_atuais(
     df,
     executed_orders_df,
 ):
-    return graf_preco_atuais(
+    return bar_precos_atuais(
         data_recency,
         df,
         executed_orders_df,
@@ -1011,7 +1056,7 @@ def preco_atuais(
     Input('tabs', 'value'),
     prevent_initial_call=True,
 )
-def preco_tab(  # noqa: PLR0915
+def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
     data_recency,
     data_recency_candlestick,
     df,
@@ -1033,7 +1078,78 @@ def preco_tab(  # noqa: PLR0915
     minutes_ago = now - datetime.timedelta(minutes=data_recency)
 
     try:
-        fig1 = go.Figure()
+        if 'rsi' not in indicadores:
+            fig1 = go.Figure()
+        elif 'rsi' in indicadores:
+            fig1 = make_subplots(
+                rows=2,
+                cols=1,
+                # shared_xaxes=True,  # Compartilhar eixo x
+                vertical_spacing=0.40,  # Aumentar espaçamento
+                row_heights=[0.7, 0.3],
+                subplot_titles=('BTC-BRL Price', 'RSI'),  # Adicionar títulos
+            )
+
+        fig1.update_layout(
+            title='BTC-BRL Prices Over Time',
+            xaxis=dict(
+                title='Timestamp',
+                rangeslider=dict(visible=True),
+                range=[
+                    minutes_ago.strftime('%Y-%m-%d %H:%M:%S'),
+                    now.strftime('%Y-%m-%d %H:%M:%S'),
+                ],
+            ),
+            # Eixo principal para preço
+            yaxis=dict(
+                title='Price (BRL)',
+                titlefont=dict(color='blue'),
+                tickfont=dict(color='blue'),
+                side='left',
+                # autorange=True,
+            ),
+            # Eixo para RSI
+            # yaxis2=dict(
+            #     title='RSI',
+            #     titlefont=dict(color='purple'),
+            #     tickfont=dict(color='purple'),
+            #     anchor='x',
+            #     overlaying='y',
+            #     side='right',
+            #     position=0.05,
+            #     autorange=True,
+            #     range=[0, 100],  # RSI vai de 0 a 100
+            # ),
+            # Eixo para MACD
+            yaxis3=dict(
+                title='MACD',
+                titlefont=dict(color='orange'),
+                tickfont=dict(color='orange'),
+                anchor='free',
+                overlaying='y',
+                side='right',
+                position=0.95,
+                autorange=True,
+            ),
+            # Eixo para ATR
+            yaxis4=dict(
+                title='ATR',
+                titlefont=dict(color='brown'),
+                tickfont=dict(color='brown'),
+                anchor='free',
+                overlaying='y',
+                side='right',
+                position=0.90,
+                autorange=True,
+            ),
+            # Layout geral
+            showlegend=True,
+            legend=dict(
+                orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1
+            ),
+            margin=dict(t=100),  # Margem superior para acomodar a legenda
+            xaxis_rangeslider_visible='rangeslider' in graf_info,
+        )
 
         if 'candlestick' in graf_info:
             # convertendo o tempo de recência para
@@ -1071,6 +1187,9 @@ def preco_tab(  # noqa: PLR0915
                     name='Api Binance',
                 )
             )
+        # Excluir linhas fora do intervalo de interesse
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        df = df[(df['timestamp'] >= minutes_ago) & (df['timestamp'] <= now)]
         if 'ticker' in graf_info:
             fig1.add_trace(
                 go.Scatter(
@@ -1078,9 +1197,10 @@ def preco_tab(  # noqa: PLR0915
                     y=df['last'],
                     mode='lines',
                     name='Último Preço',
-                    line=dict(color='white', width=1),
+                    line=dict(color='blue', width=1.5),
                 )
             )
+
         if 'orders' in graf_info:
             # adicionando marcadores com as ordens de compra e venda
             fig1.add_trace(
@@ -1110,46 +1230,102 @@ def preco_tab(  # noqa: PLR0915
                 )
             )
         # abrindo o arquivo de indicadores.csv
-        df2 = pd.read_csv(INDICADORES_FILE)
+        df2 = pd.read_csv(BTCBRL_FILE)
+        # Excluir linhas fora do intervalo de interesse
+        df2['timestamp'] = (
+            pd.to_datetime(df2['timestamp']).astype(np.int64) // 10**6
+        )
+        df2 = df2[
+            (df2['timestamp'] >= minutes_ago.timestamp() * 1000)
+            & (df2['timestamp'] <= now.timestamp() * 1000)
+        ]
         # Add indicators based on checkbox selection
         if 'short_ma' in indicadores:
             fig1.add_trace(
-                go.Scatter(
-                    x=df2['timestamp'],
+                go.Scattergl(
+                    x=df2['Kline open time'],
                     y=df2['short_ma'],
                     mode='lines',
-                    name='MA20',
+                    name='short_ma',
                     line=dict(color='blue', width=1),
                 )
             )
 
         if 'long_ma' in indicadores:
             fig1.add_trace(
-                go.Scatter(
-                    x=df2['timestamp'],
+                go.Scattergl(
+                    x=df2['Kline open time'],
                     y=df2['long_ma'],
                     mode='lines',
-                    name='MA50',
+                    name='long_ma',
                     line=dict(color='red', width=1),
                 )
             )
 
+        if 'MA20' in indicadores:
+            fig1.add_trace(
+                go.Scattergl(
+                    x=df2['Kline open time'],
+                    y=df2['MA20'],
+                    mode='lines',
+                    name='MA20',
+                    line=dict(color='green', width=1),
+                )
+            )
+
+        if 'MA200' in indicadores:
+            fig1.add_trace(
+                go.Scattergl(
+                    x=df2['Kline open time'],
+                    y=df2['MA200'],
+                    mode='lines',
+                    name='MA200',
+                    line=dict(color='purple', width=1),
+                )
+            )
+
         if 'rsi' in indicadores:
+            # Adicionar o RSI
             fig1.add_trace(
                 go.Scatter(
-                    x=df2['timestamp'],
+                    x=df2['Kline open time'],
                     y=df2['rsi'],
                     mode='lines',
                     name='RSI',
-                    yaxis='y2',
                     line=dict(color='purple', width=1),
-                )
+                ),
+                row=2,
+                col=1,
+            )
+
+            # Adicionar linhas de sobrecompra/sobrevenda
+            fig1.add_hline(
+                y=70, line_color='red', line_dash='dash', row=2, col=1
+            )
+            fig1.add_hline(
+                y=30, line_color='green', line_dash='dash', row=2, col=1
+            )
+            fig1.add_hline(
+                y=50, line_color='gray', line_dash='dash', row=2, col=1
+            )
+
+            # Configurar o layout do subplot RSI
+            fig1.update_yaxes(
+                title_text='RSI',
+                range=[0, 100],
+                row=2,
+                col=1,
+                tickmode='linear',
+                tick0=0,
+                dtick=20,
+                gridcolor='gray',
+                gridwidth=0.5,
             )
 
         if 'macd' in indicadores:
             fig1.add_trace(
                 go.Scatter(
-                    x=df2['timestamp'],
+                    x=df2['Kline open time'],
                     y=df2['macd'],
                     mode='lines',
                     name='MACD',
@@ -1160,7 +1336,7 @@ def preco_tab(  # noqa: PLR0915
 
             fig1.add_trace(
                 go.Scatter(
-                    x=df2['timestamp'],
+                    x=df2['Kline open time'],
                     y=df2['macd_signal'],
                     mode='lines',
                     name='Signal',
@@ -1172,7 +1348,7 @@ def preco_tab(  # noqa: PLR0915
         if 'bbands' in indicadores:
             fig1.add_trace(
                 go.Scatter(
-                    x=df2['timestamp'],
+                    x=df2['Kline open time'],
                     y=df2['bb_upper'],
                     mode='lines',
                     name='Upper BB',
@@ -1182,7 +1358,7 @@ def preco_tab(  # noqa: PLR0915
 
             fig1.add_trace(
                 go.Scatter(
-                    x=df2['timestamp'],
+                    x=df2['Kline open time'],
                     y=df2['bb_middle'],
                     mode='lines',
                     name='Middle BB',
@@ -1192,7 +1368,7 @@ def preco_tab(  # noqa: PLR0915
 
             fig1.add_trace(
                 go.Scatter(
-                    x=df2['timestamp'],
+                    x=df2['Kline open time'],
                     y=df2['bb_lower'],
                     mode='lines',
                     name='Lower BB',
@@ -1203,7 +1379,7 @@ def preco_tab(  # noqa: PLR0915
         if 'atr' in indicadores:
             fig1.add_trace(
                 go.Scatter(
-                    x=df2['timestamp'],
+                    x=df2['Kline open time'],
                     y=df2['atr'],
                     mode='lines',
                     name='ATR',
@@ -1212,16 +1388,38 @@ def preco_tab(  # noqa: PLR0915
                 )
             )
 
-        fig1.update_layout(
-            title='BTC-BRL Prices Over Time',
-            xaxis_title='Timestamp',
-            yaxis_title='Price (BRL)',
-            xaxis_rangeslider_visible=True,
-            xaxis_range=[
-                minutes_ago.strftime('%Y-%m-%d %H:%M:%S'),
-                now.strftime('%Y-%m-%d %H:%M:%S'),
-            ],
-        )
+        # adicionando os sinais de compra(1)df[signal]
+        # e venda(-1) df[signal] ao gráfico
+        if 'sinais' in indicadores:
+            fig1.add_trace(
+                go.Scatter(
+                    x=df2[df2['position'] == 1]['Kline open time'],
+                    y=df2[df2['position'] == 1]['close']
+                    * 0.994,  # Desloca 0.1% para baixo
+                    mode='markers',
+                    name='Sinal de Compra',
+                    marker=dict(
+                        color='green',
+                        size=12,  # Aumentei um pouco o tamanho
+                        symbol='triangle-up',
+                    ),
+                )
+            )
+            fig1.add_trace(
+                go.Scatter(
+                    x=df2[df2['position'] == -1]['Kline open time'],
+                    y=df2[df2['position'] == -1]['close']
+                    * 1.005,  # Desloca 0.1% para cima
+                    mode='markers',
+                    name='Sinal de Venda',
+                    marker=dict(
+                        color='red',
+                        size=12,  # Aumentei um pouco o tamanho
+                        symbol='triangle-down',
+                    ),
+                )
+            )
+
         return [
             html.Div(
                 children=[
@@ -1297,9 +1495,10 @@ def tabela_historico(
 def update_code(spreadsheet_result):
     return html.Div([
         html.H3('Spreadsheet Result'),
-        html.Code(
-            f'Code: {spreadsheet_result.code()}',
+        dmc.Code(
+            spreadsheet_result.code(),
             style={'whiteSpace': 'pre-wrap'},
+            block=True,
         ),
         html.Div(f'Selection: {spreadsheet_result.selection()}'),
         html.Div(f'Dataframes: {spreadsheet_result.dfs()}'),
@@ -1394,6 +1593,7 @@ def ordens_tab(value, executed_orders_df, balance_df, df_precos):
             executed_orders_df = pd.DataFrame(executed_orders_df)
             # Criando um Gráfico de anel para o balance da minha conta
             balance_df = pd.DataFrame(balance_df)
+            df_precos = pd.DataFrame(df_precos)
 
             balance_df = balance_df.drop(
                 columns=['success', 'utimestamp', 'timestamp']
@@ -1504,17 +1704,7 @@ def atualizar_preco_venda_input(df_executed_orders, df_balance, df_precos):
     df_precos = pd.DataFrame(df_precos)
     df_executed_orders = pd.DataFrame(df_executed_orders)
     df_balance = pd.DataFrame(df_balance)
-    # o gatilho vai aqui
-    sell_trigger = 380000.00
     ultimo_preco = df_precos['last'].iloc[-1]
-    if ultimo_preco > sell_trigger:
-        Sell(
-            ultimo_preco,
-            ultimo_preco,
-            df_balance['BTC'].iloc[0],
-            True,
-            market='BTC-BRL',
-        )
 
     return ultimo_preco
 
@@ -1646,9 +1836,13 @@ def switch_theme(_, theme):
 
 
 @callback(
-    Output({'type': 'graph', 'index': ALL}, 'figure'),
-    Input('mantine-provider', 'forceColorScheme'),
+    Output({'type': 'graph', 'index': ALL}, 'figure', allow_duplicate=True),
+    Input(
+        'mantine-provider',
+        'forceColorScheme',
+    ),
     State({'type': 'graph', 'index': ALL}, 'id'),
+    prevent_initial_call=True,
 )
 def update_figure(theme, ids):
     template = (
@@ -1694,70 +1888,70 @@ def toggle_aside(opened, aside):
 
 # Callback para dispara uma notificação
 # quando um trigger do estrategias.py é acionado
-@callback(
-    Output('notify-container', 'children'),
-    Input('interval-component', 'n_intervals'),
-    prevent_initial_call=True,
-)
-def alerta_preco(n_intervals):
-    # lendo o arquivo de ordens
-    log_file_path = CAMINHO + r'\log.csv'
-    log_df = pd.read_csv(log_file_path, sep=';', encoding='utf-8')
+# @callback(
+#     Output('notify-container', 'children'),
+#     Input('interval-component', 'n_intervals'),
+#     prevent_initial_call=True,
+# )
+# def alerta_preco(n_intervals):
+#     # lendo o arquivo de ordens
+#     log_file_path = CAMINHO + r'\log.csv'
+#     log_df = pd.read_csv(log_file_path, sep=';', encoding='utf-8')
 
-    # Converte a coluna 'time' para datetime
-    log_df['time'] = pd.to_datetime(log_df['time'], format='mixed')
+#     # Converte a coluna 'time' para datetime
+#     log_df['time'] = pd.to_datetime(log_df['time'], format='mixed')
 
-    # verificando se o ultimo log foi a seguntos atrás ou agora mesmo
-    last_log = log_df['time'].iloc[-1]
+#     # verificando se o ultimo log foi a seguntos atrás ou agora mesmo
+#     last_log = log_df['time'].iloc[-1]
 
-    now = datetime.datetime.now()  # Obtém a data e hora atuais
+#     now = datetime.datetime.now()  # Obtém a data e hora atuais
 
-    # Calcula a diferença entre os dois objetos datetime
-    time_difference = now - last_log
-    # Acessa o atributo seconds do objeto timedelta
-    tempo_comparado = get_interval() * 0.5
-    auto_close = tempo_comparado * 1000
-    if time_difference.seconds < tempo_comparado:
-        loglevel = log_df['levelname'].iloc[-1]
-        if loglevel == 'INFO':
-            return dmc.Notification(
-                id='my-notification',
-                title='Mensagem do Robô',
-                message=log_df['message'].iloc[-1],
-                color='blue',
-                action='show',
-                autoClose=auto_close,
-                icon=DashIconify(icon='logos:geekbot'),
-            )
-        elif loglevel == 'WARNING':
-            return dmc.Notification(
-                id='my-notification',
-                title='Atenção',
-                message=log_df['message'].iloc[-1],
-                color='yellow',
-                action='show',
-                autoClose=auto_close,
-                icon=DashIconify(icon='twemoji:warning'),
-            )
-        elif loglevel == 'ERROR':
-            return dmc.Notification(
-                id='my-notification',
-                title='Mensagem do Robô',
-                message=log_df['message'].iloc[-1],
-                color='red',
-                action='show',
-                autoClose=auto_close,
-                icon=DashIconify(icon='twemoji:cross-mark'),
-            )
-        else:
-            return dmc.Notification(
-                id='my-notification',
-                title='Mensagem do Robô',
-                message=log_df['message'].iloc[-1],
-                color='green',
-                action='show',
-                autoClose=auto_close,
-                icon=DashIconify(icon='twemoji:check-mark'),
-            )
-    else:
-        return
+#     # Calcula a diferença entre os dois objetos datetime
+#     time_difference = now - last_log
+#     # Acessa o atributo seconds do objeto timedelta
+#     tempo_comparado = get_interval() * 0.5
+#     auto_close = tempo_comparado * 1000
+#     if time_difference.seconds < tempo_comparado:
+#         loglevel = log_df['levelname'].iloc[-1]
+#         if loglevel == 'INFO':
+#             return dmc.Notification(
+#                 id='my-notification',
+#                 title='Mensagem do Robô',
+#                 message=log_df['message'].iloc[-1],
+#                 color='blue',
+#                 action='show',
+#                 autoClose=auto_close,
+#                 icon=DashIconify(icon='logos:geekbot'),
+#             )
+#         elif loglevel == 'WARNING':
+#             return dmc.Notification(
+#                 id='my-notification',
+#                 title='Atenção',
+#                 message=log_df['message'].iloc[-1],
+#                 color='yellow',
+#                 action='show',
+#                 autoClose=auto_close,
+#                 icon=DashIconify(icon='twemoji:warning'),
+#             )
+#         elif loglevel == 'ERROR':
+#             return dmc.Notification(
+#                 id='my-notification',
+#                 title='Mensagem do Robô',
+#                 message=log_df['message'].iloc[-1],
+#                 color='red',
+#                 action='show',
+#                 autoClose=auto_close,
+#                 icon=DashIconify(icon='twemoji:cross-mark'),
+#             )
+#         else:
+#             return dmc.Notification(
+#                 id='my-notification',
+#                 title='Mensagem do Robô',
+#                 message=log_df['message'].iloc[-1],
+#                 color='green',
+#                 action='show',
+#                 autoClose=auto_close,
+#                 icon=DashIconify(icon='twemoji:check-mark'),
+#             )
+#     else:
+#         return
