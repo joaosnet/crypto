@@ -1,7 +1,9 @@
 import json
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 import httpx
+import pandas as pd
 from rich import print
 
 try:
@@ -52,11 +54,14 @@ def get_coinpair():
 
 
 def fetch_bitpreco_history(
-    symbol: str,
-    resolution: str,
-    time_range: Dict[str, int],
-    countback: int,
-    currency_code: str,
+    symbol: str = 'BTC_BRL',
+    resolution: str = '1',
+    time_range: Dict[str, int] = {
+        'from': int(datetime.now().timestamp()) - 1184400,
+        'to': int(datetime.now().timestamp()),
+    },
+    countback: int = 0,
+    currency_code: str = 'BRL',
 ) -> Optional[Dict[str, Any]]:
     """
     Busca dados históricos de preços da API da BitPreço.
@@ -105,6 +110,25 @@ def fetch_bitpreco_history(
         response = httpx.get(url, params=params, headers=headers)
         response.raise_for_status()
         data = response.json()
+        data = pd.DataFrame(data)
+        data.drop(columns=['s'], inplace=True)
+        data.rename(
+            columns={
+                't': 'timestamp',
+                'o': 'open',
+                'c': 'close',
+                'h': 'high',
+                'l': 'low',
+                'v': 'volume',
+            },
+            inplace=True,
+        )
+        data['timestamp'] = pd.to_datetime(data['timestamp'], unit='s')
+        data['timestamp'] = (
+            data['timestamp']
+            .dt.tz_localize('UTC')
+            .dt.tz_convert('America/Sao_Paulo')
+        )
         return data
     except httpx.RequestError as exc:
         print(f'[red]Erro na requisição:[/red] {exc}')

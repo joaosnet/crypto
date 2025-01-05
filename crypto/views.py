@@ -4,7 +4,6 @@ import json
 import traceback
 
 import dash_mantine_components as dmc
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
@@ -24,12 +23,15 @@ from crypto.bot import get_interval
 from crypto.componentes_personalizados import (
     bar_precos_atuais,
 )
-from crypto.estrategias import BTCBRL_FILE
+from crypto.estrategias import BTCBRL_BITY, BTCBRL_FILE
 
 try:
     from crypto.segredos import CAMINHO
 except ImportError:
     from segredos import CAMINHO
+
+import duckdb as dd
+from rich import print
 
 # Definição das variáveis de ambiente
 PRICE_FILE = CAMINHO + '/ticker.csv'
@@ -770,21 +772,11 @@ painel_alertas = dmc.Paper(
     dmc.Stack(
         [
             dmc.Text('Painel de Insights e Alertas', size='lg', fw=700),
-            # dmc.Text('Configurar alertas personalizados', c='gray'),
-            # dmc.NumberInput(
-            #     id='alerta-preco',
-            #     label='Alerta de Preço',
-            #     description='Definir um preço para alerta',
-            #     value=0,
-            #     min=0,
-            #     step=0.01,
-            # ),
-            # dmc.Button('Ativar Alerta', id='botao-alerta'),
             dmc.CheckboxGroup(
                 id='graf-info',
                 label='Plots do Gráfico',
                 description='Selecione informações do gráfico'
-                + 'que deseja mostrar',
+                + ' que deseja mostrar',
                 withAsterisk=True,
                 mb=10,
                 children=dmc.Group(
@@ -798,6 +790,10 @@ painel_alertas = dmc.Paper(
                         dmc.Checkbox(
                             label='Gráfico de Velas da Binance',
                             value='candlestick',
+                        ),
+                        dmc.Checkbox(
+                            label='Gráfico de Velas da Bity',
+                            value='bity_candlestick',
                         ),
                         dmc.Checkbox(
                             label='Mostrar Intervalo de Barras',
@@ -816,27 +812,22 @@ painel_alertas = dmc.Paper(
                 mb=10,
                 children=dmc.Group(
                     [
-                        dmc.Checkbox(
-                            label='Média Móvel 5 dias', value='short_ma'
-                        ),
-                        dmc.Checkbox(
-                            label='Média Móvel 10 dias', value='long_ma'
-                        ),
-                        dmc.Checkbox(
-                            label='Média Móvel 20 dias', value='MA20'
-                        ),
-                        dmc.Checkbox(label='Múltiplo de Mayer', value='MA200'),
+                        dmc.Checkbox(label='EMA 5', value='EMA_5'),
+                        dmc.Checkbox(label='EMA 10', value='EMA_10'),
+                        dmc.Checkbox(label='EMA 20', value='EMA_20'),
+                        dmc.Checkbox(label='EMA 200', value='EMA_200'),
                         dmc.Checkbox(label='RSI', value='rsi'),
                         dmc.Checkbox(label='MACD', value='macd'),
                         dmc.Checkbox(
                             label='Bandas de Bollinger', value='bbands'
                         ),
-                        dmc.Checkbox(label='ATR', value='atr'),
+                        dmc.Checkbox(label='Estocástico', value='stoch'),
+                        dmc.Checkbox(label='Volume Médio', value='volume'),
                         dmc.Checkbox(label='Sinais', value='sinais'),
                     ],
                     mt=10,
                 ),
-                value=['short_ma', 'long_ma', 'rsi', 'sinais'],
+                value=[],
             ),
         ],
     ),
@@ -972,11 +963,24 @@ def update_refresh_rate(value):
     Output('df-precos', 'data'),
     Input('interval-component', 'n_intervals'),
 )
-def update_df_precos(n_intervals):
-    # ticker_json = Ticker().json()
-    df_precos = pd.read_csv(PRICE_FILE)
-    # df_precos = save_price_to_csv(ticker_json)
-    return df_precos.to_dict('records')
+def update_df_precos(_):
+    # df_precos = pd.read_csv(PRICE_FILE)
+    # return df_precos.to_dict('records')
+    # Leitura do arquivo CSV usando DuckDB
+    con = dd.connect()
+    query = f"SELECT * FROM read_csv_auto('{PRICE_FILE}')"
+    result = con.execute(query).fetchall()
+
+    # Obtenção dos nomes das colunas
+    column_names = [desc[0] for desc in con.description]
+
+    # Conversão para uma lista de dicionários
+    data = [dict(zip(column_names, row)) for row in result]
+
+    # Fechando a conexão
+    con.close()
+
+    return data
 
 
 @app.callback(
@@ -993,8 +997,8 @@ def update_df_executed_orders(n_intervals):
     Input('interval-component', 'n_intervals'),
 )
 def update_df_balance(n_intervals):
-    balance_df = pd.read_csv(BALANCE_FILE)
-    return balance_df.to_dict('records')
+    balance_df = pd.read_csv(BALANCE_FILE).to_dict('records')
+    return balance_df
 
 
 # Callback para atualizar os ícones das abas
@@ -1065,10 +1069,6 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
     indicadores,
     value,
 ):
-    df = pd.DataFrame(df)
-
-    executed_orders_df = pd.DataFrame(executed_orders_df)
-
     # Obtenha a data e hora atuais
     now = datetime.datetime.now()
     data_recency = float(data_recency)
@@ -1076,7 +1076,8 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
         data_recency = 3
     # Calcule o início do período de interesse (10 minutos atrás)
     minutes_ago = now - datetime.timedelta(minutes=data_recency)
-
+    minutes_ago = pd.to_datetime(minutes_ago).tz_localize('America/Sao_Paulo')
+    now = pd.to_datetime(now).tz_localize('America/Sao_Paulo')
     try:
         if 'rsi' not in indicadores:
             fig1 = go.Figure()
@@ -1187,10 +1188,54 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                     name='Api Binance',
                 )
             )
-        # Excluir linhas fora do intervalo de interesse
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        df = df[(df['timestamp'] >= minutes_ago) & (df['timestamp'] <= now)]
+        indicadores_tecnicos = [
+            'EMA_5',
+            'EMA_10',
+            'EMA_20',
+            'EMA_200',
+            'rsi',
+            'macd',
+            'bbands',
+            'stoch',
+            'sinais',
+        ]
+        if 'bity_candlestick' in graf_info or any(
+            indicador in indicadores for indicador in indicadores_tecnicos
+        ):
+            df_bity = dd.read_csv(BTCBRL_BITY).to_df()
+            df_bity['timestamp'] = (
+                pd.to_datetime(df_bity['timestamp'])
+                .dt.tz_localize('UTC')
+                .dt.tz_convert('America/Sao_Paulo')
+            )
+            df_bity = df_bity[
+                (df_bity['timestamp'] >= minutes_ago)
+                & (df_bity['timestamp'] <= now)
+            ]
+
+        if 'bity_candlestick' in graf_info:
+            fig1.add_trace(
+                go.Candlestick(
+                    x=df_bity['timestamp'],
+                    open=df_bity['open'],
+                    high=df_bity['high'],
+                    low=df_bity['low'],
+                    close=df_bity['close'],
+                    name='Bity dataframe',
+                )
+            )
+
         if 'ticker' in graf_info:
+            df = pd.DataFrame(df)
+            # Excluir linhas fora do intervalo de interesse
+            df['timestamp'] = (
+                pd.to_datetime(df['timestamp'])
+                .dt.tz_localize('UTC')
+                .dt.tz_convert('America/Sao_Paulo')
+            )
+            df = df[
+                (df['timestamp'] >= minutes_ago) & (df['timestamp'] <= now)
+            ]
             fig1.add_trace(
                 go.Scatter(
                     x=df['timestamp'],
@@ -1202,94 +1247,95 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
             )
 
         if 'orders' in graf_info:
+            executed_orders_df = pd.DataFrame(executed_orders_df)
             # adicionando marcadores com as ordens de compra e venda
-            fig1.add_trace(
-                go.Scatter(
-                    x=executed_orders_df[executed_orders_df['type'] == 'BUY'][
-                        'time_stamp'
-                    ],
-                    y=executed_orders_df[executed_orders_df['type'] == 'BUY'][
-                        'price'
-                    ],
-                    mode='markers',
-                    name='BUY Executed Orders',
-                    marker=dict(color='orange', size=10.5, symbol='x'),
-                )
+            executed_orders_df['time_stamp'] = (
+                pd.to_datetime(executed_orders_df['time_stamp'])
+                .dt.tz_localize('UTC')
+                .dt.tz_convert('America/Sao_Paulo')
             )
-            fig1.add_trace(
-                go.Scatter(
-                    x=executed_orders_df[executed_orders_df['type'] == 'SELL'][
-                        'time_stamp'
-                    ],
-                    y=executed_orders_df[executed_orders_df['type'] == 'SELL'][
-                        'price'
-                    ],
-                    mode='markers',
-                    name='SELL Executed Orders',
-                    marker=dict(color='green', size=10.5, symbol='x'),
+            executed_orders_df = executed_orders_df[
+                (executed_orders_df['time_stamp'] >= minutes_ago)
+                & (executed_orders_df['time_stamp'] <= now)
+            ]
+            if not executed_orders_df.empty:
+                fig1.add_trace(
+                    go.Scatter(
+                        x=executed_orders_df[
+                            executed_orders_df['type'] == 'BUY'
+                        ]['time_stamp'],
+                        y=executed_orders_df[
+                            executed_orders_df['type'] == 'BUY'
+                        ]['price'],
+                        mode='markers',
+                        name='BUY Executed Orders',
+                        marker=dict(color='orange', size=10.5, symbol='x'),
+                    )
                 )
-            )
-        # abrindo o arquivo de indicadores.csv
-        df2 = pd.read_csv(BTCBRL_FILE)
-        # Excluir linhas fora do intervalo de interesse
-        df2['timestamp'] = (
-            pd.to_datetime(df2['timestamp']).astype(np.int64) // 10**6
-        )
-        df2 = df2[
-            (df2['timestamp'] >= minutes_ago.timestamp() * 1000)
-            & (df2['timestamp'] <= now.timestamp() * 1000)
-        ]
-        # Add indicators based on checkbox selection
-        if 'short_ma' in indicadores:
+                fig1.add_trace(
+                    go.Scatter(
+                        x=executed_orders_df[
+                            executed_orders_df['type'] == 'SELL'
+                        ]['time_stamp'],
+                        y=executed_orders_df[
+                            executed_orders_df['type'] == 'SELL'
+                        ]['price'],
+                        mode='markers',
+                        name='SELL Executed Orders',
+                        marker=dict(color='green', size=10.5, symbol='x'),
+                    )
+                )
+        # Add EMAs based on checkbox selection
+        if 'EMA_5' in indicadores:
             fig1.add_trace(
                 go.Scattergl(
-                    x=df2['Kline open time'],
-                    y=df2['short_ma'],
+                    x=df_bity['timestamp'],
+                    y=df_bity['EMA_5'],
                     mode='lines',
-                    name='short_ma',
+                    name='EMA 5',
                     line=dict(color='blue', width=1),
                 )
             )
 
-        if 'long_ma' in indicadores:
+        if 'EMA_10' in indicadores:
             fig1.add_trace(
                 go.Scattergl(
-                    x=df2['Kline open time'],
-                    y=df2['long_ma'],
+                    x=df_bity['timestamp'],
+                    y=df_bity['EMA_10'],
                     mode='lines',
-                    name='long_ma',
+                    name='EMA 10',
                     line=dict(color='red', width=1),
                 )
             )
 
-        if 'MA20' in indicadores:
+        if 'EMA_20' in indicadores:
             fig1.add_trace(
                 go.Scattergl(
-                    x=df2['Kline open time'],
-                    y=df2['MA20'],
+                    x=df_bity['timestamp'],
+                    y=df_bity['EMA_20'],
                     mode='lines',
-                    name='MA20',
+                    name='EMA 20',
                     line=dict(color='green', width=1),
                 )
             )
 
-        if 'MA200' in indicadores:
+        if 'EMA_200' in indicadores:
             fig1.add_trace(
                 go.Scattergl(
-                    x=df2['Kline open time'],
-                    y=df2['MA200'],
+                    x=df_bity['timestamp'],
+                    y=df_bity['EMA_200'],
                     mode='lines',
-                    name='MA200',
+                    name='EMA 200',
                     line=dict(color='purple', width=1),
                 )
             )
 
         if 'rsi' in indicadores:
-            # Adicionar o RSI
+            # Add RSI
             fig1.add_trace(
                 go.Scatter(
-                    x=df2['Kline open time'],
-                    y=df2['rsi'],
+                    x=df_bity['timestamp'],
+                    y=df_bity['rsi'],
                     mode='lines',
                     name='RSI',
                     line=dict(color='purple', width=1),
@@ -1298,7 +1344,7 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                 col=1,
             )
 
-            # Adicionar linhas de sobrecompra/sobrevenda
+            # Add overbought/oversold lines
             fig1.add_hline(
                 y=70, line_color='red', line_dash='dash', row=2, col=1
             )
@@ -1309,7 +1355,7 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                 y=50, line_color='gray', line_dash='dash', row=2, col=1
             )
 
-            # Configurar o layout do subplot RSI
+            # Configure RSI subplot layout
             fig1.update_yaxes(
                 title_text='RSI',
                 range=[0, 100],
@@ -1323,10 +1369,11 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
             )
 
         if 'macd' in indicadores:
+            # Add MACD line
             fig1.add_trace(
                 go.Scatter(
-                    x=df2['Kline open time'],
-                    y=df2['macd'],
+                    x=df_bity['timestamp'],
+                    y=df_bity['macd'],
                     mode='lines',
                     name='MACD',
                     yaxis='y3',
@@ -1334,10 +1381,11 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                 )
             )
 
+            # Add signal line
             fig1.add_trace(
                 go.Scatter(
-                    x=df2['Kline open time'],
-                    y=df2['macd_signal'],
+                    x=df_bity['timestamp'],
+                    y=df_bity['macd_signal'],
                     mode='lines',
                     name='Signal',
                     yaxis='y3',
@@ -1345,11 +1393,23 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                 )
             )
 
+            # Add MACD histogram
+            fig1.add_trace(
+                go.Bar(
+                    x=df_bity['timestamp'],
+                    y=df_bity['MACD_hist'],
+                    name='MACD Histogram',
+                    yaxis='y3',
+                    marker_color='gray',
+                )
+            )
+
         if 'bbands' in indicadores:
+            # Add Bollinger Bands
             fig1.add_trace(
                 go.Scatter(
-                    x=df2['Kline open time'],
-                    y=df2['bb_upper'],
+                    x=df_bity['timestamp'],
+                    y=df_bity['bb_upper'],
                     mode='lines',
                     name='Upper BB',
                     line=dict(color='gray', width=1),
@@ -1358,8 +1418,8 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
 
             fig1.add_trace(
                 go.Scatter(
-                    x=df2['Kline open time'],
-                    y=df2['bb_middle'],
+                    x=df_bity['timestamp'],
+                    y=df_bity['bb_middle'],
                     mode='lines',
                     name='Middle BB',
                     line=dict(color='gray', width=1),
@@ -1368,23 +1428,45 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
 
             fig1.add_trace(
                 go.Scatter(
-                    x=df2['Kline open time'],
-                    y=df2['bb_lower'],
+                    x=df_bity['timestamp'],
+                    y=df_bity['bb_lower'],
                     mode='lines',
                     name='Lower BB',
                     line=dict(color='gray', width=1),
                 )
             )
 
-        if 'atr' in indicadores:
+        if 'stoch' in indicadores:
+            # Add Stochastic
             fig1.add_trace(
                 go.Scatter(
-                    x=df2['Kline open time'],
-                    y=df2['atr'],
+                    x=df_bity['timestamp'],
+                    y=df_bity['STOCH_K'],
                     mode='lines',
-                    name='ATR',
-                    yaxis='y4',
-                    line=dict(color='brown', width=1),
+                    name='Stoch %K',
+                    line=dict(color='blue', width=1),
+                )
+            )
+
+            fig1.add_trace(
+                go.Scatter(
+                    x=df_bity['timestamp'],
+                    y=df_bity['STOCH_D'],
+                    mode='lines',
+                    name='Stoch %D',
+                    line=dict(color='orange', width=1),
+                )
+            )
+
+        if 'volume' in indicadores:
+            # Add volume SMA
+            fig1.add_trace(
+                go.Scatter(
+                    x=df_bity['timestamp'],
+                    y=df_bity['volume_sma'],
+                    mode='lines',
+                    name='Volume SMA',
+                    line=dict(color='purple', width=1),
                 )
             )
 
@@ -1393,8 +1475,8 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
         if 'sinais' in indicadores:
             fig1.add_trace(
                 go.Scatter(
-                    x=df2[df2['position'] == 1]['Kline open time'],
-                    y=df2[df2['position'] == 1]['close']
+                    x=df_bity[df_bity['position'] == 1]['timestamp'],
+                    y=df_bity[df_bity['position'] == 1]['close']
                     * 0.994,  # Desloca 0.1% para baixo
                     mode='markers',
                     name='Sinal de Compra',
@@ -1407,8 +1489,8 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
             )
             fig1.add_trace(
                 go.Scatter(
-                    x=df2[df2['position'] == -1]['Kline open time'],
-                    y=df2[df2['position'] == -1]['close']
+                    x=df_bity[df_bity['position'] == -1]['timestamp'],
+                    y=df_bity[df_bity['position'] == -1]['close']
                     * 1.005,  # Desloca 0.1% para cima
                     mode='markers',
                     name='Sinal de Venda',
@@ -1438,9 +1520,10 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
         return html.Div(
             children=[
                 html.H5(children=f'{resultado}'),
-                dcc.Markdown(
-                    '{}'.format(tb),
-                    style={'font-size': '14pt'},
+                dmc.Code(
+                    children=tb,
+                    style={'whiteSpace': 'pre-wrap'},
+                    block=True,
                 ),
             ]
         )

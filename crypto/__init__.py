@@ -15,7 +15,7 @@ _dash_renderer._set_react_version('18.2.0')
 # Caminhos relativos para o bot e o executável Python do ambiente virtual
 BOT_PATH = os.path.join(os.path.dirname(__file__), 'bot.py')
 VENV_PYTHON = os.path.join(
-    os.path.dirname(__file__), '..', '.venv', 'Scripts', 'python.exe'
+    os.path.dirname(__file__), '..', '.venv', 'bin', 'python'
 )
 
 
