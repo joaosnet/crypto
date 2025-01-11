@@ -2,7 +2,6 @@ import json
 import time
 
 import pandas as pd
-from requests.exceptions import ReadTimeout
 from rich import console, print
 
 try:
@@ -102,7 +101,6 @@ def main():
 
         except KeyboardInterrupt:
             print(':rotating_light: [bold magenta]Saindo...[/bold magenta]')
-            console.print_exception()
             break
         except Exception as e:
             if 'timed out' in str(e) or 'ConnectionError' in str(e):

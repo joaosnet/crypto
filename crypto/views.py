@@ -11,8 +11,6 @@ from dash import ALL, Input, Output, Patch, State, callback, dcc, html
 from dash import callback_context as ctx
 from dash.exceptions import PreventUpdate
 from dash_iconify import DashIconify
-
-# from dash_resizable_panels import Panel, PanelGroup, PanelResizeHandle
 from mitosheet.mito_dash.v1 import Spreadsheet, mito_callback
 from plotly.subplots import make_subplots
 

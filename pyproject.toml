@@ -30,6 +30,7 @@ dependencies = [
 [tool.uv]
 dev-dependencies = [
   "ipykernel>=6.29.5",
+  "memory-profiler>=0.61.0",
   "pygwalker>=0.4.9.10",
   "ruff >=0.6.5",
   "taskipy>=1.13.0",

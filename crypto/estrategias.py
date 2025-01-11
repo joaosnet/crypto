@@ -1,13 +1,15 @@
 import json
 import logging
 from datetime import datetime
-from typing import Dict, Optional, Union
+from typing import Dict, Optional
 
 import duckdb as dd
 import fireducks.pandas as pd
 import numpy as np
 import talib as ta
-from rich import console, print  # noqa: F401
+
+# from memory_profiler import profile
+from rich import console
 from rich.logging import RichHandler
 
 try:
@@ -18,29 +20,24 @@ except ImportError:
 try:
     from api_binance import get_klines
     from api_bitpreco import (
-        # Balance,
         Buy,
-        # OpenOrders,
         Sell,
         fetch_bitpreco_history,
-        # Ticker,
         get_coinpair,
     )
 except ImportError:
     from crypto.api_binance import get_klines
     from crypto.api_bitpreco import (
-        # Balance,
         Buy,
         Sell,
         fetch_bitpreco_history,
-        # Ticker,
         get_coinpair,
     )
 
 # Configuração do logger sem as requisições HTTP
 FORMAT = '%(message)s'
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.ERROR,
     format=FORMAT,
     datefmt='[%X]',
     handlers=[RichHandler()],
@@ -69,44 +66,6 @@ BTCBRL_FILE = CAMINHO + '/btc_brl_binance.csv'
 BTCBRL_BITY = CAMINHO + '/btc_brl_bity.csv'
 BACKTEST_DAYS = 30
 MAX_DAILY_TRADES = 100
-
-
-def bot_msg(levelname: str, message: str):
-    """Salva apenas operações de trade no arquivo CSV"""
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    trade_data = f'{timestamp};{levelname};{message}\n'
-    with open(f'{CAMINHO}/log.csv', 'a', encoding='utf-8') as f:
-        f.write(trade_data)
-
-
-class TradeHistory:
-    def __init__(self):
-        self.trades = self._load_trades()
-
-    @staticmethod
-    def _load_trades():
-        try:
-            with open(TRADE_HISTORY_FILE, 'r', encoding='utf-8') as f:
-                content = f.read().strip()
-                if not content:  # Se arquivo estiver vazio
-                    return []
-                return json.loads(content)
-        except (FileNotFoundError, json.JSONDecodeError):
-            # Criar arquivo com lista vazia se não existir ou estiver inválido
-            with open(TRADE_HISTORY_FILE, 'w', encoding='utf-8') as f:
-                json.dump([], f)
-            return []
-
-    def save_trade(self, trade_type: str, price: float, volume: float):
-        trade = {
-            'timestamp': datetime.now().isoformat(),
-            'type': trade_type,
-            'price': price,
-            'volume': volume,
-        }
-        self.trades.append(trade)
-        with open(TRADE_HISTORY_FILE, 'w', encoding='utf-8') as f:
-            json.dump(self.trades, f)
 
 
 def get_price_history(symbol='BTCBRL', interval='1m', limit=1000):
@@ -310,7 +269,7 @@ def generate_signals(df):
 def validate_trade_conditions(
     price: float,
     balance: Dict,
-    trade_history: Union[TradeHistory, list],
+    trade_history: json,
     last_price: Optional[float] = None,
 ) -> bool:
     """
@@ -331,7 +290,10 @@ def validate_trade_conditions(
     ]
 
     if len(today_trades) >= MAX_DAILY_TRADES:
-        bot_msg('WARNING', 'Número máximo de trades diários atingido')
+        console.print(
+            ':warning: [bold red]Número máximo de trades'
+            + ' diários atingido[/bold red]'
+        )
         return False
 
     # Validação de volatilidade extrema
@@ -340,19 +302,22 @@ def validate_trade_conditions(
         last_price is not None
         and abs((price - last_price) / last_price) > volatilidade
     ):
-        bot_msg('WARNING', 'Volatilidade muito alta - trade cancelado')
+        console.print(
+            ':warning: [bold red]Volatilidade muito alta - '
+            + 'trade cancelado[/bold red]'
+        )
         return False
 
     return True
 
 
 # Função para executar a estratégia de negociação com controle de risco
+# @profile
 def execute_trade(ticker_json, balance, executed_orders):
     """
     Executa operações com melhor gerenciamento de risco
     """
     try:
-        trade_history = TradeHistory()
         current_price = float(ticker_json['last'])
 
         if not validate_trade_conditions(
@@ -369,11 +334,10 @@ def execute_trade(ticker_json, balance, executed_orders):
         df = generate_signals(df)
 
         trend, risk_factor = analyze_market(df)
-        bot_msg(
-            'INFO', f'Tendência atual: {trend}, Fator de risco: {risk_factor}'
-        )
-        logging.warning(
-            f'Tendência atual: {trend}, Fator de risco: {risk_factor}'
+        console.print(
+            ':chart_with_upwards_trend: [bold cyan]'
+            + f'Tendência atual:[/bold cyan] {trend}, '
+            f'[bold cyan]Fator de risco:[/bold cyan] {risk_factor}'
         )
 
         risk_per_trade = adjust_risk(risk_factor)
@@ -385,7 +349,6 @@ def execute_trade(ticker_json, balance, executed_orders):
         # last_signal = -1
         if last_signal == SIGNAL_BUY and brl_balance > 0:
             execute_buy(
-                trade_history,
                 executed_orders,
                 brl_balance,
                 risk_per_trade,
@@ -393,14 +356,16 @@ def execute_trade(ticker_json, balance, executed_orders):
             )
         elif last_signal == SIGNAL_SELL and btc_balance > 0:
             execute_sell(
-                trade_history,
                 executed_orders,
                 btc_balance,
                 risk_per_trade,
                 last_price,
             )
         else:
-            bot_msg('INFO', 'Nenhuma ação necessária no momento.')
+            console.print(
+                ':hourglass: [bold yellow]Nenhuma ação necessária '
+                + 'no momento.[/bold yellow]'
+            )
 
     except Exception as e:
         logger.error(f'Erro na execução do trade: {str(e)}')
@@ -419,9 +384,7 @@ def adjust_risk(risk_factor):
     return min(adjusted_risk, 0.2)
 
 
-def execute_buy(
-    trade_history, executed_orders, brl_balance, risk_per_trade, last_price
-):
+def execute_buy(executed_orders, brl_balance, risk_per_trade, last_price):
     amount_to_invest = brl_balance * risk_per_trade
     amount = amount_to_invest / last_price
     price = last_price
@@ -433,18 +396,13 @@ def execute_buy(
         limited=True,
         market=coinpair,
     )
-    trade_type = 'BUY'
-    bot_msg('INFO', f'Compra executada: {resposta_compra}')
     console.print(
         ':four_leaf_clover: [bold green]Compra executada:[/bold green] '
         + str(resposta_compra)
     )
-    trade_history.save_trade(trade_type, price, amount)
 
 
-def execute_sell(
-    trade_history, executed_orders, btc_balance, risk_per_trade, last_price
-):
+def execute_sell(executed_orders, btc_balance, risk_per_trade, last_price):
     amount = btc_balance * risk_per_trade
     ultima_compra = next(
         (
@@ -454,33 +412,29 @@ def execute_sell(
         ),
         None,
     )
-    # print(ultima_compra)
 
     if ultima_compra is not None:
         preco_compra = ultima_compra['price']
         take_profit = preco_compra * profitability
         stop_loss_price = preco_compra * STOP_LOSS
-        print(
-            f'Preço de compra: {preco_compra}'
-            f'\nTake Profit: {take_profit}'
-            f'\nStop Loss: {stop_loss_price}'
+        console.print(
+            ':moneybag: [bold blue]Preço de compra:'
+            + f'[/bold blue] {preco_compra}\n'
+            f'[bold blue]Take Profit:[/bold blue] {take_profit}\n'
+            f'[bold blue]Stop Loss:[/bold blue] {stop_loss_price}'
         )
         if last_price >= take_profit:
-            execute_sell_trade(
-                trade_history, amount, last_price, 'SELL (Take Profit)'
-            )
-            # print('Take Profit acionado')
+            execute_sell_trade(amount, last_price, 'SELL (Take Profit)')
         elif last_price <= stop_loss_price:
-            execute_sell_trade(
-                trade_history, amount, stop_loss_price, 'SELL (Stop Loss)'
-            )
-            # print('Stop Loss acionado')
+            execute_sell_trade(amount, stop_loss_price, 'SELL (Stop Loss)')
         else:
-            print('Preço não atingiu limite de venda.')
-            bot_msg('INFO', 'Preço não atingiu limite de venda.')
+            console.print(
+                ':hourglass: [bold yellow]Preço não atingiu '
+                + 'limite de venda.[/bold yellow]'
+            )
 
 
-def execute_sell_trade(trade_history, amount, price, trade_type):
+def execute_sell_trade(amount, price, trade_type):
     resposta_venda = Sell(
         price=price,
         volume=amount,
@@ -488,13 +442,11 @@ def execute_sell_trade(trade_history, amount, price, trade_type):
         limited=True,
         market=coinpair,
     )
-    bot_msg('INFO', f'{trade_type} executada: {str(resposta_venda)}')
     console.print(
         f':four_leaf_clover: [bold yellow]{trade_type} '
         + 'executada:[/bold yellow] '
         + str(resposta_venda)
     )
-    trade_history.save_trade(trade_type, price, amount)
 
 
 def analyze_trend(df: pd.DataFrame) -> str:
