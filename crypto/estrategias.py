@@ -1,15 +1,13 @@
-# estrategias.py
 import json
 import logging
-import traceback
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 import duckdb as dd
+import fireducks.pandas as pd
 import numpy as np
-import pandas as pd
 import talib as ta
-from rich import console
+from rich import console, print  # noqa: F401
 from rich.logging import RichHandler
 
 try:
@@ -67,7 +65,7 @@ TRADE_HISTORY_FILE = CAMINHO + '/trade_history.json'
 INDICADORES_FILE = CAMINHO + '/indicadores.csv'
 SINAIS_FILE = CAMINHO + '/sinais.csv'
 INTERVAL_FILE = CAMINHO + '/interval.json'
-BTCBRL_FILE = CAMINHO + '/btc_brl_full.csv'
+BTCBRL_FILE = CAMINHO + '/btc_brl_binance.csv'
 BTCBRL_BITY = CAMINHO + '/btc_brl_bity.csv'
 BACKTEST_DAYS = 30
 MAX_DAILY_TRADES = 100
@@ -104,7 +102,7 @@ class TradeHistory:
             'timestamp': datetime.now().isoformat(),
             'type': trade_type,
             'price': price,
-            'Volume': volume,
+            'volume': volume,
         }
         self.trades.append(trade)
         with open(TRADE_HISTORY_FILE, 'w', encoding='utf-8') as f:
@@ -182,40 +180,46 @@ def calculate_indicators(df):
     """
     df = df.copy()
 
+    # Converter Series para numpy arrays
+    close_arr = df['close'].to_numpy(dtype=float)
+    high_arr = df['high'].to_numpy(dtype=float)
+    low_arr = df['low'].to_numpy(dtype=float)
+    volume_arr = df['volume'].to_numpy(dtype=float)
+
     # EMAs
-    df['EMA_5'] = ta.EMA(df['close'], timeperiod=5)
-    df['EMA_10'] = ta.EMA(df['close'], timeperiod=10)
-    df['EMA_20'] = ta.EMA(df['close'], timeperiod=20)
-    df['EMA_200'] = ta.EMA(df['close'], timeperiod=200)
+    df['EMA_5'] = ta.EMA(close_arr, timeperiod=5)
+    df['EMA_10'] = ta.EMA(close_arr, timeperiod=10)
+    df['EMA_20'] = ta.EMA(close_arr, timeperiod=20)
+    df['EMA_200'] = ta.EMA(close_arr, timeperiod=200)
 
     # MACD
     df['macd'], df['macd_signal'], df['MACD_hist'] = ta.MACD(
-        df['close'], fastperiod=12, slowperiod=26, signalperiod=9
+        close_arr, fastperiod=12, slowperiod=26, signalperiod=9
     )
 
     # RSI
-    df['rsi'] = ta.RSI(df['close'], timeperiod=14)
+    df['rsi'] = ta.RSI(close_arr, timeperiod=14)
 
     # Bollinger Bands
     df['bb_upper'], df['bb_middle'], df['bb_lower'] = ta.BBANDS(
-        df['close'], timeperiod=20, nbdevup=2, nbdevdn=2
+        close_arr, timeperiod=20, nbdevup=2, nbdevdn=2
     )
 
     # Stochastic
     df['STOCH_K'], df['STOCH_D'] = ta.STOCH(
-        df['high'],
-        df['low'],
-        df['close'],
+        high_arr,
+        low_arr,
+        close_arr,
         fastk_period=14,
         slowk_period=3,
         slowd_period=3,
     )
 
     # Volume médio
-    df['volume_sma'] = ta.SMA(df['Volume'], timeperiod=20)
+    df['volume_sma'] = ta.SMA(volume_arr, timeperiod=20)
 
     # Average True Range (ATR)
-    df['atr'] = ta.ATR(df['high'], df['low'], df['close'], timeperiod=14)
+    df['atr'] = ta.ATR(high_arr, low_arr, close_arr, timeperiod=14)
 
     return df
 
@@ -262,35 +266,32 @@ def generate_signals(df):
         ),
     )
 
-    # Sinais de compra
-    buy_conditions = (
-        (df['trend'] == 'alta')
-        & (df['EMA_cross'] == 1)
-        & (df['MACD_cross'] == 1)
-        & (df['rsi'].shift(1) < RSI_OVERSOLD)
-        & (df['rsi'] > RSI_OVERSOLD)
-        & (df['close'] <= df['bb_lower'])
-        & (df['STOCH_K'] > df['STOCH_D'])
-        & (df['STOCH_K'] < STOCH_OVERSOLD)
-        & (df['Volume'] > df['volume_sma'])
-    )
+    # Sinais de compra - agora precisa atender apenas 3 das 5 condições
+    buy_signals = pd.DataFrame({
+        'ema_signal': (df['EMA_cross'] == 1),
+        'macd_signal': (df['MACD_cross'] == 1),
+        'rsi_signal': (df['rsi'] < RSI_OVERSOLD),
+        'bb_signal': (df['close'] <= df['bb_lower']),
+        'stoch_signal': (df['STOCH_K'] < STOCH_OVERSOLD),
+    })
 
-    # Sinais de venda
-    sell_conditions = (
-        (df['trend'] == 'baixa')
-        & (df['EMA_cross'] == -1)
-        & (df['MACD_cross'] == -1)
-        & (df['rsi'].shift(1) > RSI_OVERBOUGHT)
-        & (df['rsi'] < RSI_OVERBOUGHT)
-        & (df['close'] >= df['bb_upper'])
-        & (df['STOCH_K'] < df['STOCH_D'])
-        & (df['STOCH_K'] > STOCH_OVERBOUGHT)
-        & (df['Volume'] > df['volume_sma'])
-    )
+    # Sinais de venda - agora precisa atender apenas 3 das 5 condições
+    sell_signals = pd.DataFrame({
+        'ema_signal': (df['EMA_cross'] == -1),
+        'macd_signal': (df['MACD_cross'] == -1),
+        'rsi_signal': (df['rsi'] > RSI_OVERBOUGHT),
+        'bb_signal': (df['close'] >= df['bb_upper']),
+        'stoch_signal': (df['STOCH_K'] > STOCH_OVERBOUGHT),
+    })
 
-    # Aplicar sinais
-    df.loc[buy_conditions, 'signal'] = SIGNAL_BUY
-    df.loc[sell_conditions, 'signal'] = SIGNAL_SELL
+    # Conta quantas condições são atendidas
+    buy_count = buy_signals.sum(axis=1)
+    sell_count = sell_signals.sum(axis=1)
+
+    # Gera sinais quando pelo menos 3 condições são atendidas
+    CONDICOES = 3
+    df.loc[buy_count >= CONDICOES, 'signal'] = SIGNAL_BUY
+    df.loc[sell_count >= CONDICOES, 'signal'] = SIGNAL_SELL
 
     # Calcular posições
     df['position'] = df['signal'].fillna(0)
@@ -309,24 +310,36 @@ def generate_signals(df):
 def validate_trade_conditions(
     price: float,
     balance: Dict,
-    trade_history: TradeHistory,
+    trade_history: Union[TradeHistory, list],
     last_price: Optional[float] = None,
 ) -> bool:
     """
     Valida condições para execução de trades
     """
     # Verifica número máximo de trades diários
+    trades_list = (
+        trade_history
+        if isinstance(trade_history, list)
+        else trade_history.trades
+    )
+
     today_trades = [
         t
-        for t in trade_history.trades
-        if datetime.fromisoformat(t['timestamp']).date()
+        for t in trades_list
+        if datetime.strptime(t['time_stamp'], '%Y-%m-%d %H:%M:%S').date()
         == datetime.now().date()
     ]
+
     if len(today_trades) >= MAX_DAILY_TRADES:
         bot_msg('WARNING', 'Número máximo de trades diários atingido')
         return False
+
     # Validação de volatilidade extrema
-    if last_price is not None and abs((price - last_price) / last_price) > 0.1:
+    volatilidade = 0.1
+    if (
+        last_price is not None
+        and abs((price - last_price) / last_price) > volatilidade
+    ):
         bot_msg('WARNING', 'Volatilidade muito alta - trade cancelado')
         return False
 
@@ -334,18 +347,16 @@ def validate_trade_conditions(
 
 
 # Função para executar a estratégia de negociação com controle de risco
-def execute_trade(ticker_json, balance):
+def execute_trade(ticker_json, balance, executed_orders):
     """
     Executa operações com melhor gerenciamento de risco
     """
     try:
-        risk_per_trade = 0.25
-        trade_executed = False
         trade_history = TradeHistory()
         current_price = float(ticker_json['last'])
 
         if not validate_trade_conditions(
-            current_price, balance, trade_history
+            current_price, balance, executed_orders
         ):
             return
 
@@ -355,138 +366,156 @@ def execute_trade(ticker_json, balance):
             return
 
         df = calculate_indicators(df)
-        df = generate_signals(df)  # Adicionar esta linha para gerar os sinais
+        df = generate_signals(df)
 
-        # Análise de tendência
-        trend = analyze_trend(df)
-        risk_factor = calculate_risk_factor(df)
+        trend, risk_factor = analyze_market(df)
         bot_msg(
             'INFO', f'Tendência atual: {trend}, Fator de risco: {risk_factor}'
         )
         logging.warning(
             f'Tendência atual: {trend}, Fator de risco: {risk_factor}'
         )
-        # Ajusta volume baseado no risco
-        adjusted_risk = risk_per_trade * risk_factor
-        risk_per_trade = min(adjusted_risk, 0.2)
-        # Obter o último sinal gerado
+
+        risk_per_trade = adjust_risk(risk_factor)
         last_signal = df['position'].iloc[-1]
         last_price = ticker_json['last']
-        # open_orders = OpenOrders(coinpair).json()
 
-        # Verificar ordens abertas
-        # if open_orders:
-        #     bot_msg('INFO', 'Existem ordens abertas. Aguardando execução.')
-        #     logging.warning('Existem ordens abertas. Aguardando execução.')
-        #     time.sleep(30)
-
-        # Verificar saldo disponível
         brl_balance = balance.get('BRL', 0)
         btc_balance = balance.get('BTC', 0)
-
-        # Estratégia de Compra
+        # last_signal = -1
         if last_signal == SIGNAL_BUY and brl_balance > 0:
-            amount_to_invest = brl_balance * risk_per_trade
-            amount = amount_to_invest / last_price
-            price = last_price
-
-            # Executar compra
-            resposta_compra = Buy(
-                price=price,
-                volume=amount,
-                amount=amount,
-                limited=True,
-                market=coinpair,
+            execute_buy(
+                trade_history,
+                executed_orders,
+                brl_balance,
+                risk_per_trade,
+                last_price,
             )
-            # resposta_compra = None
-            trade_type = 'Compra'
-            # trade_executed = True
-            bot_msg('INFO', f'Compra executada: {resposta_compra}')
-            console.print(
-                ':four_leaf_clover: [bold green]Compra executada:[/bold green]'
-                + ' '
-                + resposta_compra
-            )
-
-        # Estratégia de Venda (Take Profit e Stop Loss)
         elif last_signal == SIGNAL_SELL and btc_balance > 0:
-            amount = btc_balance * risk_per_trade
-            price = last_price
-
-            # Calcular Take Profit e Stop Loss
-            take_profit = price * profitability
-            stop_loss_price = price * STOP_LOSS
-
-            # Condição de Take Profit ou Stop Loss
-            if last_price >= take_profit:
-                resposta_venda = Sell(
-                    price=take_profit,
-                    volume=amount,
-                    amount=amount,
-                    limited=True,
-                    market=coinpair,
-                )
-                # resposta_venda = None
-                trade_type = 'Venda (Take Profit)'
-                # trade_executed = True
-                bot_msg(
-                    'INFO', f'Venda executada (Take Profit): {resposta_venda}'
-                )
-                console.print(
-                    ':four_leaf_clover: [bold yellow]Venda executada'
-                    + ' (Take Profit)[/bold yellow]: '
-                    + resposta_venda
-                )
-            elif last_price <= stop_loss_price:
-                resposta_venda = Sell(
-                    price=stop_loss_price,
-                    volume=amount,
-                    amount=amount,
-                    limited=True,
-                    market=coinpair,
-                )
-                # resposta_venda = None
-                trade_type = 'Venda (Stop Loss)'
-                # trade_executed = True
-                bot_msg(
-                    'INFO', f'Venda executada (Stop Loss): {resposta_venda}'
-                )
-                console.print(
-                    ':four_leaf_clover: [bold blue]Venda executada'
-                    + f' (Stop Loss)[/bold blue]: {resposta_venda}'
-                )
-            else:
-                bot_msg('INFO', 'Preço não atingiu limite de venda.')
-
+            execute_sell(
+                trade_history,
+                executed_orders,
+                btc_balance,
+                risk_per_trade,
+                last_price,
+            )
         else:
             bot_msg('INFO', 'Nenhuma ação necessária no momento.')
 
-        # Registra trade
-        if trade_executed:
-            trade_history.save_trade(trade_type, price, amount)
-
     except Exception as e:
-        logger.error(
-            f'Erro na execução do trade: {str(e)}',
-            # exc_info=True,
+        logger.error(f'Erro na execução do trade: {str(e)}')
+        console.print_exception()
+
+
+def analyze_market(df):
+    trend = analyze_trend(df)
+    risk_factor = calculate_risk_factor(df)
+    return trend, risk_factor
+
+
+def adjust_risk(risk_factor):
+    risk_per_trade = 0.25
+    adjusted_risk = risk_per_trade * risk_factor
+    return min(adjusted_risk, 0.2)
+
+
+def execute_buy(
+    trade_history, executed_orders, brl_balance, risk_per_trade, last_price
+):
+    amount_to_invest = brl_balance * risk_per_trade
+    amount = amount_to_invest / last_price
+    price = last_price
+
+    resposta_compra = Buy(
+        price=price,
+        volume=amount,
+        amount=amount,
+        limited=True,
+        market=coinpair,
+    )
+    trade_type = 'BUY'
+    bot_msg('INFO', f'Compra executada: {resposta_compra}')
+    console.print(
+        ':four_leaf_clover: [bold green]Compra executada:[/bold green] '
+        + str(resposta_compra)
+    )
+    trade_history.save_trade(trade_type, price, amount)
+
+
+def execute_sell(
+    trade_history, executed_orders, btc_balance, risk_per_trade, last_price
+):
+    amount = btc_balance * risk_per_trade
+    ultima_compra = next(
+        (
+            order
+            for order in executed_orders
+            if order['type'] == 'BUY' and order['status'] == 'FILLED'
+        ),
+        None,
+    )
+    # print(ultima_compra)
+
+    if ultima_compra is not None:
+        preco_compra = ultima_compra['price']
+        take_profit = preco_compra * profitability
+        stop_loss_price = preco_compra * STOP_LOSS
+        print(
+            f'Preço de compra: {preco_compra}'
+            f'\nTake Profit: {take_profit}'
+            f'\nStop Loss: {stop_loss_price}'
         )
-        print(traceback.format_exc())
+        if last_price >= take_profit:
+            execute_sell_trade(
+                trade_history, amount, last_price, 'SELL (Take Profit)'
+            )
+            # print('Take Profit acionado')
+        elif last_price <= stop_loss_price:
+            execute_sell_trade(
+                trade_history, amount, stop_loss_price, 'SELL (Stop Loss)'
+            )
+            # print('Stop Loss acionado')
+        else:
+            print('Preço não atingiu limite de venda.')
+            bot_msg('INFO', 'Preço não atingiu limite de venda.')
+
+
+def execute_sell_trade(trade_history, amount, price, trade_type):
+    resposta_venda = Sell(
+        price=price,
+        volume=amount,
+        amount=amount,
+        limited=True,
+        market=coinpair,
+    )
+    bot_msg('INFO', f'{trade_type} executada: {str(resposta_venda)}')
+    console.print(
+        f':four_leaf_clover: [bold yellow]{trade_type} '
+        + 'executada:[/bold yellow] '
+        + str(resposta_venda)
+    )
+    trade_history.save_trade(trade_type, price, amount)
 
 
 def analyze_trend(df: pd.DataFrame) -> str:
     """
     Analisa tendência do mercado
     """
+    STRONG_UP_THRESHOLD = 0.7
+    UP_THRESHOLD = 0.5
+    STRONG_DOWN_THRESHOLD = 0.3
+    DOWN_THRESHOLD = 0.5
+
     last_rows = df.tail(20)
     trend_up = (last_rows['EMA_5'] > last_rows['EMA_10']).sum() / 20
 
-    if trend_up > 0.7:
+    if trend_up > STRONG_UP_THRESHOLD:
         return 'STRONG_UP'
-    elif trend_up > 0.5:
+    elif trend_up > UP_THRESHOLD:
         return 'UP'
-    elif trend_up < 0.3:
+    elif trend_up < STRONG_DOWN_THRESHOLD:
         return 'STRONG_DOWN'
-    elif trend_up < 0.5:
+    elif trend_up < DOWN_THRESHOLD:
         return 'DOWN'
     return 'NEUTRAL'
 
@@ -499,7 +528,8 @@ def calculate_risk_factor(df: pd.DataFrame) -> float:
     atr = df['atr'].iloc[-1]
 
     risk_factor = 1.0
-    if volatility > 0.02:  # Alta volatilidade
+    high_volatility = 0.02
+    if volatility > high_volatility:  # Alta volatilidade
         risk_factor *= 0.7
     if atr > df['atr'].mean() * 1.5:  # ATR alto
         risk_factor *= 0.8

@@ -21,7 +21,7 @@ if __name__ == '__main__':
         Timer(1, open_browser).start()
         app.run(debug=False)
     elif DEGUG == '1':
-        app.run(debug=False, host='0.0.0.0')
+        app.run(debug=True, host='0.0.0.0')
     else:
         console = Console()
         console.print(

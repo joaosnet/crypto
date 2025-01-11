@@ -23,7 +23,7 @@ from crypto.bot import get_interval
 from crypto.componentes_personalizados import (
     bar_precos_atuais,
 )
-from crypto.estrategias import BTCBRL_BITY, BTCBRL_FILE
+from crypto.estrategias import BTCBRL_BITY
 
 try:
     from crypto.segredos import CAMINHO
@@ -31,7 +31,7 @@ except ImportError:
     from segredos import CAMINHO
 
 import duckdb as dd
-from rich import print
+from rich import print  # noqa: F401
 
 # Definição das variáveis de ambiente
 PRICE_FILE = CAMINHO + '/ticker.csv'
@@ -171,7 +171,7 @@ controle_tempo = html.Div([
                                 description='Tempo de recência dos dados',
                                 placeholder='Selecione uma opção',
                                 id='data-recency',
-                                value='15',
+                                value='30',
                                 data=[
                                     {
                                         'label': 'Último 1 minuto',
@@ -802,7 +802,7 @@ painel_alertas = dmc.Paper(
                     ],
                     mt=10,
                 ),
-                value=['candlestick'],
+                value=['orders', 'bity_candlestick', 'ticker'],
             ),
             dmc.CheckboxGroup(
                 id='indicadores-tecnicos',
@@ -827,7 +827,7 @@ painel_alertas = dmc.Paper(
                     ],
                     mt=10,
                 ),
-                value=[],
+                value=['sinais'],
             ),
         ],
     ),
@@ -1109,18 +1109,18 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                 side='left',
                 # autorange=True,
             ),
-            # Eixo para RSI
-            # yaxis2=dict(
-            #     title='RSI',
-            #     titlefont=dict(color='purple'),
-            #     tickfont=dict(color='purple'),
-            #     anchor='x',
-            #     overlaying='y',
-            #     side='right',
-            #     position=0.05,
-            #     autorange=True,
-            #     range=[0, 100],  # RSI vai de 0 a 100
-            # ),
+            # Eixo para Volume
+            yaxis2=dict(
+                title='Volume',
+                titlefont=dict(
+                    color='rgba(128, 128, 128, 0.5)'
+                ),  # gray with 50% opacity
+                tickfont=dict(
+                    color='rgba(128, 128, 128, 0.5)'
+                ),  # gray with 50% opacity
+                domain=[0, 0.2],  # Make volume chart 20% of height on bottom
+                anchor='x',
+            ),
             # Eixo para MACD
             yaxis3=dict(
                 title='MACD',
@@ -1198,6 +1198,7 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
             'bbands',
             'stoch',
             'sinais',
+            'volume',
         ]
         if 'bity_candlestick' in graf_info or any(
             indicador in indicadores for indicador in indicadores_tecnicos
@@ -1228,10 +1229,8 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
         if 'ticker' in graf_info:
             df = pd.DataFrame(df)
             # Excluir linhas fora do intervalo de interesse
-            df['timestamp'] = (
-                pd.to_datetime(df['timestamp'])
-                .dt.tz_localize('UTC')
-                .dt.tz_convert('America/Sao_Paulo')
+            df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize(
+                'America/Sao_Paulo'
             )
             df = df[
                 (df['timestamp'] >= minutes_ago) & (df['timestamp'] <= now)
@@ -1251,8 +1250,7 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
             # adicionando marcadores com as ordens de compra e venda
             executed_orders_df['time_stamp'] = (
                 pd.to_datetime(executed_orders_df['time_stamp'])
-                .dt.tz_localize('UTC')
-                .dt.tz_convert('America/Sao_Paulo')
+                .dt.tz_localize('America/Sao_Paulo')
             )
             executed_orders_df = executed_orders_df[
                 (executed_orders_df['time_stamp'] >= minutes_ago)
@@ -1393,14 +1391,17 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                 )
             )
 
-            # Add MACD histogram
+            # Add MACD histogram with conditional colors
+            colors = [
+                'red' if hist < 0 else 'green' for hist in df_bity['MACD_hist']
+            ]
             fig1.add_trace(
                 go.Bar(
                     x=df_bity['timestamp'],
                     y=df_bity['MACD_hist'],
                     name='MACD Histogram',
                     yaxis='y3',
-                    marker_color='gray',
+                    marker_color=colors,
                 )
             )
 
@@ -1460,13 +1461,19 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
 
         if 'volume' in indicadores:
             # Add volume SMA
+            # Add volume with red/green colors based on price direction
+            colors = [
+                'red' if close < open else 'green'
+                for close, open in zip(df_bity['close'], df_bity['open'])
+            ]
+
             fig1.add_trace(
-                go.Scatter(
+                go.Bar(
                     x=df_bity['timestamp'],
                     y=df_bity['volume_sma'],
-                    mode='lines',
                     name='Volume SMA',
-                    line=dict(color='purple', width=1),
+                    yaxis='y2',
+                    marker_color=colors,
                 )
             )
 

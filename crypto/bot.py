@@ -2,6 +2,7 @@ import json
 import time
 
 import pandas as pd
+from requests.exceptions import ReadTimeout
 from rich import console, print
 
 try:
@@ -63,19 +64,35 @@ def get_interval():
 
 
 def main():
-    while True:
+    retry_delay = 5
+    max_retries = 3
+    while True:  # noqa: PLR1702
         try:
-            coinpair = get_coinpair()
-            ticker_json = Ticker(coinpair).json()
-            save_price_to_csv(ticker_json)
+            for attempt in range(max_retries):
+                try:
+                    coinpair = get_coinpair()
+                    ticker_json = Ticker(coinpair).json()
+                    save_price_to_csv(ticker_json)
 
-            balance = Balance().json()
-            save_balance_to_csv(balance)
+                    balance = Balance().json()
+                    save_balance_to_csv(balance)
 
-            executed_orders = ExecutedOrders(coinpair).json()
-            save_orders_to_csv(executed_orders)
-
-            execute_trade(ticker_json, balance)
+                    executed_orders = ExecutedOrders(coinpair).json()
+                    save_orders_to_csv(executed_orders)
+                    execute_trade(ticker_json, balance, executed_orders)
+                    break  # Success, exit retry loop
+                except Exception as e:
+                    if 'timed out' in str(e) or 'ConnectionError' in str(e):
+                        if attempt < max_retries - 1:
+                            print(
+                                f'[bold magenta]Tentativa {attempt + 1}'
+                                + f' falhou: {str(e)}[/bold magenta]'
+                            )
+                            time.sleep(
+                                retry_delay * (2**attempt)
+                            )  # Exponential backoff
+                            continue
+                        raise  # Re-raise the last exception if all retries failed  # noqa: E501
 
             # Tempo que pode ser controlado pelo dashboard
             # Atraves de um arquivo leve e rapido
@@ -83,15 +100,21 @@ def main():
             delay = get_interval()
             time.sleep(delay)
 
-        except (Exception, KeyboardInterrupt):
-            if KeyboardInterrupt:
+        except KeyboardInterrupt:
+            print(':rotating_light: [bold magenta]Saindo...[/bold magenta]')
+            console.print_exception()
+            break
+        except Exception as e:
+            if 'timed out' in str(e) or 'ConnectionError' in str(e):
                 print(
-                    ':rotating_light: [bold magenta]Saindo...[/bold magenta]'
+                    f'[bold magenta]Erro de conexão após {max_retries}'
+                    + f' tentativas: {str(e)}[/bold magenta]'
                 )
-                console.print_exception()
-                break
+                time.sleep(retry_delay)
+                continue
             else:
-                print('[bold magenta]ErroWorld[/bold magenta]')
+                print(f'[bold magenta]Erro: {str(e)}[/bold magenta]')
+                console.print_exception()
                 break
 
 
