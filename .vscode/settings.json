@@ -3,5 +3,21 @@
         "./crypto"
     ],
     "python.analysis.typeCheckingMode": "off",
-    "python.analysis.autoImportCompletions": false
+    "python.analysis.autoImportCompletions": false,
+    "dbcode.connections": [
+        {
+            "connectionId": "H6vFfzMm-lIEn_C5pS8t5",
+            "name": "cryptodb",
+            "driver": "postgres",
+            "connectionType": "host",
+            "host": "127.0.0.1",
+            "port": 5432,
+            "ssl": false,
+            "username": "postgres",
+            "password": "",
+            "savePassword": "secretStorage",
+            "database": "crypto_db",
+            "connectionTimeout": 30
+        }
+    ]
 }

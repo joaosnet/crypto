@@ -160,11 +160,8 @@ cython_debug/
 #.idea/
 .vscode/
 .ruff_cache/
-crypto/db/btc_brl_bity.csv
-crypto/db/btc_brl_binance.csv
-crypto/db/balance.csv
-crypto/db/executed_orders.csv
-crypto/db/log.csv
-crypto/db/ticker.csv
+crypto/db/*.csv
 
 crypto/db/trade_history.json
+crypto/db/*.parquet
+cache

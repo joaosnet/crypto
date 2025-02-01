@@ -1,10 +1,12 @@
 import json
+import time
 from datetime import datetime
 from typing import Any, Dict, Optional
 
 import httpx
 import pandas as pd
 from rich import print
+from rich.console import Console
 
 try:
     from crypto.segredos import CAMINHO, auth_token
@@ -15,6 +17,8 @@ import re
 publicTradingApi = 'https://api.bitpreco.com/v1/trading/balance'
 
 COINPAIR_FILE = CAMINHO + '/coinpair.json'
+
+console = Console()
 
 
 # Definindo a função para carregar opções de criptomoedas
@@ -149,10 +153,57 @@ def fetch_bitpreco_history(
             print(f'[red]Erro ao processar resposta:[/red] {e}')
     except ValueError:
         print('[red]Erro ao decodificar a resposta JSON.[/red]')
+        console.print_exception()
     except Exception as exc:
         print(f'[red]Erro inesperado:[/red] {exc}')
 
     return None
+
+
+# função que gera um dataset com os dados de histórico de preços da BitPreço
+def dataset_bitpreco(
+    symbol: str = 'BTC_BRL', resolution: str = '1'
+) -> pd.DataFrame:
+    # Set the starting timestamp (e.g., September 1, 2017)
+    start_time = int(datetime(2017, 9, 1).timestamp())
+
+    # Get the current timestamp
+    end_time = int(time.time())
+
+    # Initialize a list to store data frames
+    data_frames = []
+
+    # Use the fixed interval of 1184400 seconds
+    interval = 1184400
+
+    # Loop over the time range
+    current_time = start_time
+    while current_time < end_time:
+        try:
+            next_time = min(current_time + interval, end_time)
+            df = fetch_bitpreco_history(
+                symbol=symbol,
+                resolution=resolution,
+                time_range={'from': current_time, 'to': next_time},
+                countback=0,
+                currency_code='BRL',
+            )
+            if df is not None:
+                data_frames.append(df)
+            current_time = next_time
+            time.sleep(1)  # Respect API rate limits
+        except Exception as e:
+            print(f'Error at timestamp {current_time}: {e}')
+            current_time += interval
+            continue
+
+    # Combine all data frames into one
+    if data_frames:
+        full_df = pd.concat(data_frames, ignore_index=True)
+        # Save the data to a timescaledb table
+        return full_df
+    else:
+        print('No data was collected')
 
 
 def Ticker(coinpar='all-brl'):

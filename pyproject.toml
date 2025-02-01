@@ -7,7 +7,7 @@ requires-python = "==3.12.8"
 dependencies = [
     "python-binance >=1.0.19",
     "yfinance >=0.2.43",
-    "dash >=2.18.2",
+    "dash[celery,diskcache]>=2.18.2",
     "scipy >=1.14.0",
     "sympy >=1.13.2",
     "dash-dangerously-set-inner-html >=0.0.2",
@@ -24,7 +24,11 @@ dependencies = [
     "ta-lib>=0.6.0",
     "rich>=13.9.4",
     "duckdb>=1.1.2",
-    "fireducks>=1.1.5",
+    "pyarrow>=18.1.0",
+    "diskcache>=5.6.3",
+    "multiprocess>=0.70.17",
+    "psutil>=5.9.8",
+    "psycopg2-binary>=2.9.10",
 ]
 
 [tool.uv]
@@ -53,3 +57,4 @@ lint = 'ruff check . && ruff check . --diff'
 format = 'ruff check . --fix && ruff format .'
 jupyter = 'uv run --with jupyter jupyter lab'
 run = 'python main.py'
+bot = 'python crypto/bot.py'

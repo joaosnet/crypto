@@ -1,5 +1,9 @@
+import time
+from datetime import datetime
+
 import pandas as pd
 import requests
+from segredos import CAMINHO
 
 BASE_URLS = [
     'https://api.binance.com',
@@ -11,6 +15,8 @@ BASE_URLS = [
 ]
 
 STATUS_CODE = 200
+
+BTCBRL_FILE = CAMINHO + '/btc_brl_binance.csv'
 
 
 def get_klines(
@@ -88,3 +94,46 @@ def get_klines(
     else:
         resposta = response.raise_for_status()
         return str(resposta)
+
+
+def dataset_binance():
+    # Set the starting timestamp (e.g., September 1, 2017)
+    start_time = int(datetime(2017, 9, 1).timestamp() * 1000)
+
+    # Get the current timestamp
+    end_time = int(time.time() * 1000)
+
+    # Initialize a list to store data frames
+    data_frames = []
+
+    # Maximum interval per request (200 days in milliseconds)
+    max_interval = 200 * 24 * 60 * 60 * 1000
+
+    # Loop over the time range
+    current_time = start_time
+    while current_time < end_time:
+        next_time = min(current_time + max_interval, end_time)
+        df = get_klines(
+            symbol='BTCBRL',
+            interval='2h',
+            startTime=current_time,
+            endTime=next_time,
+            limit=1500,
+        )
+        df['timestamp'] = pd.to_datetime(df['Kline open time'])
+        df = df.rename(
+            columns={
+                'Close price': 'close',
+                'High price': 'high',
+                'Low price': 'low',
+            }
+        )
+        data_frames.append(df)
+        current_time = next_time
+        time.sleep(1)  # Respect API rate limits
+
+    # Combine all data frames into one
+    full_df = pd.concat(data_frames, ignore_index=True)
+
+    # Save the data to a CSV file
+    full_df.to_csv(BTCBRL_FILE, index=False)

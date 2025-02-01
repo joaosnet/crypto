@@ -3,14 +3,13 @@ import logging
 from datetime import datetime
 from typing import Dict, Optional
 
-import duckdb as dd
-import fireducks.pandas as pd
 import numpy as np
+import pandas as pd
 import talib as ta
-
-# from memory_profiler import profile
+from memory_profiler import profile
 from rich import console
 from rich.logging import RichHandler
+from timescaledb import read_from_db, save_from_db
 
 try:
     from crypto.segredos import CAMINHO
@@ -18,7 +17,6 @@ except ImportError:
     from segredos import CAMINHO
 
 try:
-    from api_binance import get_klines
     from api_bitpreco import (
         Buy,
         Sell,
@@ -26,7 +24,6 @@ try:
         get_coinpair,
     )
 except ImportError:
-    from crypto.api_binance import get_klines
     from crypto.api_bitpreco import (
         Buy,
         Sell,
@@ -58,75 +55,53 @@ STOP_LOSS = 0.95  # Limite para stop-loss (5% abaixo do preço de compra)
 RSI_OVERSOLD = 30  # Limite inferior do RSI para compra
 
 # Configurações adicionais
-TRADE_HISTORY_FILE = CAMINHO + '/trade_history.json'
-INDICADORES_FILE = CAMINHO + '/indicadores.csv'
-SINAIS_FILE = CAMINHO + '/sinais.csv'
 INTERVAL_FILE = CAMINHO + '/interval.json'
-BTCBRL_FILE = CAMINHO + '/btc_brl_binance.csv'
-BTCBRL_BITY = CAMINHO + '/btc_brl_bity.csv'
 BACKTEST_DAYS = 30
 MAX_DAILY_TRADES = 100
 
 
-def get_price_history(symbol='BTCBRL', interval='1m', limit=1000):
+def get_price_history(symbol='BTC_BRL', interval='1'):
     """
     Obtém o histórico de preços da Binance para o símbolo especificado.
     """
     try:
-        df = dd.read_csv(BTCBRL_FILE).to_df()
-        df1 = dd.read_csv(BTCBRL_BITY).to_df()
-        klines = get_klines(
-            symbol=symbol,
-            interval=interval,
-            limit=limit,
-        )
         klines1 = fetch_bitpreco_history(
-            symbol='BTC_BRL',
-            resolution='1',
+            symbol=symbol,
+            resolution=interval,
             time_range={
                 'from': int(datetime.now().timestamp()) - 1184400,
                 'to': int(datetime.now().timestamp()),
             },
             countback=0,
         )
-        # Convert timestamps to UTC timezone
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        if df['timestamp'].dt.tz is None:
-            df['timestamp'] = df['timestamp'].dt.tz_localize('UTC')
-        df['timestamp'] = df['timestamp'].dt.tz_convert('UTC')
+        df_bitpreco = read_from_db()
 
-        klines['timestamp'] = pd.to_datetime(klines['Kline open time'])
-        if klines['timestamp'].dt.tz is None:
-            klines['timestamp'] = klines['timestamp'].dt.tz_localize('UTC')
-        klines['timestamp'] = klines['timestamp'].dt.tz_convert('UTC')
+        df_bitpreco['timestamp'] = pd.to_datetime(
+            df_bitpreco['timestamp'], format='ISO8601'
+        )
+        if df_bitpreco['timestamp'].dt.tz is None:
+            df_bitpreco['timestamp'] = df_bitpreco['timestamp'].dt.tz_localize(
+                'UTC'
+            )
+        df_bitpreco['timestamp'] = df_bitpreco['timestamp'].dt.tz_convert(
+            'UTC'
+        )
 
-        df1['timestamp'] = pd.to_datetime(df1['timestamp'])
-        if df1['timestamp'].dt.tz is None:
-            df1['timestamp'] = df1['timestamp'].dt.tz_localize('UTC')
-        df1['timestamp'] = df1['timestamp'].dt.tz_convert('UTC')
-
-        klines1['timestamp'] = pd.to_datetime(klines1['timestamp'])
+        klines1['timestamp'] = pd.to_datetime(
+            klines1['timestamp'], format='ISO8601'
+        )
         if klines1['timestamp'].dt.tz is None:
             klines1['timestamp'] = klines1['timestamp'].dt.tz_localize('UTC')
         klines1['timestamp'] = klines1['timestamp'].dt.tz_convert('UTC')
 
-        klines = klines.rename(
-            columns={
-                'Close price': 'close',
-                'High price': 'high',
-                'Low price': 'low',
-            }
-        )
-
         # Filter out duplicate timestamps
-        df = df[~df['timestamp'].isin(klines['timestamp'])]
-        df1 = df1[~df1['timestamp'].isin(klines1['timestamp'])]
+        df_bitpreco = df_bitpreco[
+            ~df_bitpreco['timestamp'].isin(klines1['timestamp'])
+        ]
 
         # Concatenate dataframes
-        df = pd.concat([df, klines], ignore_index=True)
-        df1 = pd.concat([df1, klines1], ignore_index=True)
-        df.to_csv(BTCBRL_FILE, index=False)
-        return df1
+        df_bitpreco = pd.concat([df_bitpreco, klines1], ignore_index=True)
+        return df_bitpreco
     except Exception as e:
         logger.error(f'Erro ao obter histórico de preços: {e}')
         console.print_exception()
@@ -261,7 +236,7 @@ def generate_signals(df):
     )
 
     # Salvar dados
-    df.to_csv(BTCBRL_BITY, index=False)
+    save_from_db(df)
 
     return df
 
@@ -312,7 +287,7 @@ def validate_trade_conditions(
 
 
 # Função para executar a estratégia de negociação com controle de risco
-# @profile
+@profile
 def execute_trade(ticker_json, balance, executed_orders):
     """
     Executa operações com melhor gerenciamento de risco
@@ -389,13 +364,14 @@ def execute_buy(executed_orders, brl_balance, risk_per_trade, last_price):
     amount = amount_to_invest / last_price
     price = last_price
 
-    resposta_compra = Buy(
-        price=price,
-        volume=amount,
-        amount=amount,
-        limited=True,
-        market=coinpair,
-    )
+    # resposta_compra = Buy(
+    #     price=price,
+    #     volume=amount,
+    #     amount=amount,
+    #     limited=True,
+    #     market=coinpair,
+    # )
+    resposta_compra = 'success'
     console.print(
         ':four_leaf_clover: [bold green]Compra executada:[/bold green] '
         + str(resposta_compra)
@@ -435,13 +411,14 @@ def execute_sell(executed_orders, btc_balance, risk_per_trade, last_price):
 
 
 def execute_sell_trade(amount, price, trade_type):
-    resposta_venda = Sell(
-        price=price,
-        volume=amount,
-        amount=amount,
-        limited=True,
-        market=coinpair,
-    )
+    # resposta_venda = Sell(
+    #     price=price,
+    #     volume=amount,
+    #     amount=amount,
+    #     limited=True,
+    #     market=coinpair,
+    # )
+    resposta_venda = 'success'
     console.print(
         f':four_leaf_clover: [bold yellow]{trade_type} '
         + 'executada:[/bold yellow] '

@@ -13,6 +13,7 @@ from dash.exceptions import PreventUpdate
 from dash_iconify import DashIconify
 from mitosheet.mito_dash.v1 import Spreadsheet, mito_callback
 from plotly.subplots import make_subplots
+from timescaledb import read_from_db
 
 from crypto import app, dash_utils
 from crypto.api_binance import get_klines
@@ -21,15 +22,21 @@ from crypto.bot import get_interval
 from crypto.componentes_personalizados import (
     bar_precos_atuais,
 )
-from crypto.estrategias import BTCBRL_BITY
 
 try:
     from crypto.segredos import CAMINHO
 except ImportError:
     from segredos import CAMINHO
 
+# Diskcache
+import diskcache
 import duckdb as dd
+from dash.long_callback import DiskcacheLongCallbackManager
 from rich import print  # noqa: F401
+
+cache = diskcache.Cache('./cache')
+long_callback_manager = DiskcacheLongCallbackManager(cache)
+
 
 # Definição das variáveis de ambiente
 PRICE_FILE = CAMINHO + '/ticker.csv'
@@ -45,7 +52,6 @@ left_column = html.Div(
     # className="eight columns",
     children=[
         # store para armazenar o estado do df de preços quando for atualizado
-        dcc.Store(id='df-precos', storage_type='local'),
         dcc.Interval(
             id='interval-component',
             interval=1 * 1000,  # in milliseconds
@@ -108,41 +114,50 @@ left_column = html.Div(
 )
 
 controle_tempo = html.Div([
-    # html.H3(
-    #     'Painel de Controle em Tempo Real de Criptomoedas',
-    #     style={'text-align': 'center'},
-    # ),
-    dmc.Paper(
+    dmc.Card(
         children=[
-            html.Div(
+            dmc.CardSection(
+                dmc.Group(
+                    children=[
+                        dmc.Text('Painel de Controle', size='lg', fw=700),
+                    ],
+                    justify='space-between',
+                ),
+                withBorder=True,
+                inheritPadding=True,
+                py='xs',
+            ),
+            dmc.CardSection(
+                inheritPadding=True,
+                mt='sm',
+                pb='md',
                 children=[
-                    dmc.DatePickerInput(
-                        id='date-picker',
-                        placeholder='Selecione a data',
-                        value=datetime.datetime.now().strftime('%Y-%m-%d'),
-                        # style={'width': '15%'},
-                    ),
-                    dmc.Space(h=10),
-                    dmc.MultiSelect(
-                        value=['BTC-BRL'],
-                        id='filtro-cripto',
-                        data=carregar_opcoes_criptomoedas(),
-                        placeholder='Filtrar Criptomoedas',
-                        searchable=True,
-                        # style={'width': '20%'},
-                    ),
-                    dmc.Space(h=10),
-                    html.Div(
+                    dmc.ScrollArea(
+                        h=380,
+                        scrollbarSize=2,
+                        # offsetScrollbars=True,
                         children=[
-                            html.Span(
+                            dmc.DatePickerInput(
+                                id='date-picker',
+                                placeholder='Selecione a data',
+                                value=datetime.datetime.now().strftime(
+                                    '%Y-%m-%d'
+                                ),
+                                mb=10,
+                            ),
+                            dmc.MultiSelect(
+                                value=['BTC-BRL'],
+                                id='filtro-cripto',
+                                data=carregar_opcoes_criptomoedas(),
+                                placeholder='Filtrar Criptomoedas',
+                                searchable=True,
+                                mb=10,
+                            ),
+                            dmc.Text(
                                 'Taxa de Atualização (em Segundos)',
-                                style={'font-weight': 'bold'},
-                            )
-                        ],
-                    ),
-                    dmc.Space(h=10),
-                    html.Div(
-                        children=[
+                                fw='bold',
+                                mb=10,
+                            ),
                             dmc.Slider(
                                 id='interval-refresh',
                                 value=int(get_interval()),
@@ -159,11 +174,6 @@ controle_tempo = html.Div([
                                 size='xs',
                                 mb=35,
                             ),
-                        ],
-                    ),
-                    dmc.Space(h=10),
-                    html.Div(
-                        children=[
                             dmc.Select(
                                 label='Recência dos Dados',
                                 description='Tempo de recência dos dados',
@@ -171,10 +181,7 @@ controle_tempo = html.Div([
                                 id='data-recency',
                                 value='30',
                                 data=[
-                                    {
-                                        'label': 'Último 1 minuto',
-                                        'value': '1',
-                                    },
+                                    {'label': 'Último 1 minuto', 'value': '1'},
                                     {
                                         'label': 'Últimos 2 minutos',
                                         'value': '3',
@@ -191,10 +198,7 @@ controle_tempo = html.Div([
                                         'label': 'Últimos 30 minutos',
                                         'value': '30',
                                     },
-                                    {
-                                        'label': 'Última hora',
-                                        'value': '60',
-                                    },
+                                    {'label': 'Última hora', 'value': '60'},
                                     {
                                         'label': 'Últimas 2 horas',
                                         'value': '120',
@@ -211,10 +215,7 @@ controle_tempo = html.Div([
                                         'label': 'Últimas 12 horas',
                                         'value': '720',
                                     },
-                                    {
-                                        'label': 'Último dia',
-                                        'value': '1440',
-                                    },
+                                    {'label': 'Último dia', 'value': '1440'},
                                     {
                                         'label': 'Últimos 3 dias',
                                         'value': '4320',
@@ -230,7 +231,6 @@ controle_tempo = html.Div([
                                 ],
                                 mb=10,
                             ),
-                            dmc.Space(h=10),
                             dmc.Select(
                                 label='Recência dos Dados candlestick',
                                 description='Tempo de recência do candlestick',
@@ -238,10 +238,7 @@ controle_tempo = html.Div([
                                 id='data-recency-candlestick',
                                 value='1',
                                 data=[
-                                    {
-                                        'label': 'Último 1 minuto',
-                                        'value': '1',
-                                    },
+                                    {'label': 'Último 1 minuto', 'value': '1'},
                                     {
                                         'label': 'Últimos 2 minutos',
                                         'value': '3',
@@ -258,10 +255,7 @@ controle_tempo = html.Div([
                                         'label': 'Últimos 30 minutos',
                                         'value': '30',
                                     },
-                                    {
-                                        'label': 'Última hora',
-                                        'value': '60',
-                                    },
+                                    {'label': 'Última hora', 'value': '60'},
                                     {
                                         'label': 'Últimas 2 horas',
                                         'value': '120',
@@ -278,10 +272,7 @@ controle_tempo = html.Div([
                                         'label': 'Últimas 12 horas',
                                         'value': '720',
                                     },
-                                    {
-                                        'label': 'Último dia',
-                                        'value': '1440',
-                                    },
+                                    {'label': 'Último dia', 'value': '1440'},
                                     {
                                         'label': 'Últimos 3 dias',
                                         'value': '4320',
@@ -298,18 +289,16 @@ controle_tempo = html.Div([
                                 mb=10,
                             ),
                         ],
-                        className='three columns',
                     ),
                 ],
-                className='one row',
-                style={'padding': '5px 0'},
             ),
-            html.Div(id='latest-timestamp', style={'padding': '5px 0'}),
         ],
-        shadow='sm',
-        radius='xl',
-        p='xl',
+        withBorder=True,
+        shadow='xl',
+        radius='md',
+        h=450,
     ),
+    html.Div(id='latest-timestamp', style={'padding': '5px 0'}),
     html.Div(id='notify-container'),
 ])
 
@@ -751,87 +740,162 @@ historico_precos = dmc.Paper(
 )
 
 # Gráficos de Linha, Candlestick e Pizza
-graficos = dmc.Paper(
+graficos = dmc.Card(
     children=[
-        dmc.Stack(
+        dmc.CardSection(
             [
                 dmc.Text('Gráficos', size='lg', fw=700),
-                left_column,
             ],
-        )
+            withBorder=True,
+            inheritPadding=True,
+            py='xs',
+        ),
+        dmc.CardSection(
+            children=[
+                dmc.ScrollArea(
+                    h=400,
+                    children=[
+                        left_column,
+                    ],
+                ),
+            ],
+        ),
     ],
-    shadow='md',
-    radius='lg',
-    p='xl',
+    withBorder=True,
+    shadow='xl',
+    radius='md',
+    h=450,
 )
 
 # Painel lateral para alertas personalizados e indicadores
-painel_alertas = dmc.Paper(
-    dmc.Stack(
-        [
-            dmc.Text('Painel de Insights e Alertas', size='lg', fw=700),
-            dmc.CheckboxGroup(
-                id='graf-info',
-                label='Plots do Gráfico',
-                description='Selecione informações do gráfico'
-                + ' que deseja mostrar',
-                withAsterisk=True,
-                mb=10,
-                children=dmc.Group(
-                    [
-                        dmc.Checkbox(
-                            label='Ordens Executadas', value='orders'
-                        ),
-                        dmc.Checkbox(
-                            label='Dataframe do Ticket', value='ticker'
-                        ),
-                        dmc.Checkbox(
-                            label='Gráfico de Velas da Binance',
-                            value='candlestick',
-                        ),
-                        dmc.Checkbox(
-                            label='Gráfico de Velas da Bity',
-                            value='bity_candlestick',
-                        ),
-                        dmc.Checkbox(
-                            label='Mostrar Intervalo de Barras',
-                            value='rangeslider',
-                        ),
-                    ],
-                    mt=10,
-                ),
-                value=['orders', 'bity_candlestick', 'ticker'],
+painel_alertas = dmc.Card(
+    children=[
+        dmc.CardSection(
+            dmc.Group(
+                children=[
+                    dmc.Text(
+                        'Painel de Insights e Alertas', size='lg', fw=700
+                    ),
+                ],
+                justify='space-between',
             ),
-            dmc.CheckboxGroup(
-                id='indicadores-tecnicos',
-                label='Indicadores Técnicos',
-                description='Selecione os indicadores técnicos',
-                withAsterisk=True,
-                mb=10,
-                children=dmc.Group(
-                    [
-                        dmc.Checkbox(label='EMA 5', value='EMA_5'),
-                        dmc.Checkbox(label='EMA 10', value='EMA_10'),
-                        dmc.Checkbox(label='EMA 20', value='EMA_20'),
-                        dmc.Checkbox(label='EMA 200', value='EMA_200'),
-                        dmc.Checkbox(label='RSI', value='rsi'),
-                        dmc.Checkbox(label='MACD', value='macd'),
-                        dmc.Checkbox(
-                            label='Bandas de Bollinger', value='bbands'
-                        ),
-                        dmc.Checkbox(label='Estocástico', value='stoch'),
-                        dmc.Checkbox(label='Volume Médio', value='volume'),
-                        dmc.Checkbox(label='Sinais', value='sinais'),
+            withBorder=True,
+            inheritPadding=True,
+            py='xs',
+        ),
+        dmc.CardSection(
+            inheritPadding=True,
+            mt='sm',
+            pb='md',
+            children=[
+                dmc.ScrollArea(
+                    h=380,
+                    # w=350,
+                    scrollbarSize=2,
+                    # offsetScrollbars=True,
+                    children=[
+                        dmc.Stack(
+                            children=[
+                                dmc.CheckboxGroup(
+                                    id='graf-info',
+                                    label='Plots do Gráfico',
+                                    description='Selecione informações do'
+                                    + ' gráfico que deseja mostrar',
+                                    withAsterisk=True,
+                                    mb=10,
+                                    children=dmc.Group(
+                                        [
+                                            dmc.Checkbox(
+                                                label='Ordens Executadas',
+                                                value='orders',
+                                            ),
+                                            dmc.Checkbox(
+                                                label='Dataframe do Ticket',
+                                                value='ticker',
+                                            ),
+                                            dmc.Checkbox(
+                                                label='Gráfico de Velas'
+                                                + ' da Binance',
+                                                value='candlestick',
+                                            ),
+                                            dmc.Checkbox(
+                                                label='Gráfico de Velas'
+                                                + ' da Bity',
+                                                value='bity_candlestick',
+                                            ),
+                                            dmc.Checkbox(
+                                                label='Mostrar Intervalo'
+                                                + ' de Barras',
+                                                value='rangeslider',
+                                            ),
+                                        ],
+                                        mt=10,
+                                    ),
+                                    value=[
+                                        'orders',
+                                        'bity_candlestick',
+                                        'ticker',
+                                    ],
+                                ),
+                                dmc.CheckboxGroup(
+                                    id='indicadores-tecnicos',
+                                    label='Indicadores Técnicos',
+                                    description='Selecione os indicadores'
+                                    + ' técnicos',
+                                    withAsterisk=True,
+                                    mb=10,
+                                    children=dmc.Group(
+                                        [
+                                            dmc.Checkbox(
+                                                label='EMA 5', value='EMA_5'
+                                            ),
+                                            dmc.Checkbox(
+                                                label='EMA 10', value='EMA_10'
+                                            ),
+                                            dmc.Checkbox(
+                                                label='EMA 20', value='EMA_20'
+                                            ),
+                                            dmc.Checkbox(
+                                                label='EMA 200',
+                                                value='EMA_200',
+                                            ),
+                                            dmc.Checkbox(
+                                                label='RSI', value='rsi'
+                                            ),
+                                            dmc.Checkbox(
+                                                label='MACD', value='macd'
+                                            ),
+                                            dmc.Checkbox(
+                                                label='Bandas de Bollinger',
+                                                value='bbands',
+                                            ),
+                                            dmc.Checkbox(
+                                                label='Estocástico',
+                                                value='stoch',
+                                            ),
+                                            dmc.Checkbox(
+                                                label='Volume Médio',
+                                                value='volume',
+                                            ),
+                                            dmc.Checkbox(
+                                                label='Sinais', value='sinais'
+                                            ),
+                                        ],
+                                        mt=10,
+                                    ),
+                                    value=['sinais'],
+                                ),
+                            ],
+                        )
                     ],
-                    mt=10,
                 ),
-                value=['sinais'],
-            ),
-        ],
-    ),
-    shadow='md',
-    radius='lg',
-    p='xl',
+            ],
+        ),
+    ],
+    withBorder=True,
+    shadow='xl',
+    radius='md',
+    h=450,
 )
 
 comprar_vender = dmc.Paper(
@@ -857,12 +921,12 @@ layout_dashboard = html.Div(
         dcc.Store(id='df-balance', storage_type='local'),
         dmc.Grid(
             [
-                dmc.GridCol(painel_alertas, span=2),
-                dmc.GridCol(controle_tempo, span=2),
-                # dmc.GridCol(preco_atual, span=4),
+                dmc.GridCol(painel_alertas, span=3),
                 dmc.GridCol(graficos, span=6),
-                dmc.GridCol(historico_precos, span=4),
-                dmc.GridCol(comprar_vender, span=2),
+                dmc.GridCol(controle_tempo, span=3),
+                # dmc.GridCol(preco_atual, span=4),
+                dmc.GridCol(historico_precos, span=6),
+                dmc.GridCol(comprar_vender, span=6),
             ],
             justify='space-around',
             align='stretch',
@@ -1201,7 +1265,8 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
         if 'bity_candlestick' in graf_info or any(
             indicador in indicadores for indicador in indicadores_tecnicos
         ):
-            df_bity = dd.read_csv(BTCBRL_BITY).to_df()
+            df_bity = read_from_db(start_date=minutes_ago, end_date=now)
+
             df_bity['timestamp'] = (
                 pd.to_datetime(df_bity['timestamp'])
                 .dt.tz_localize('UTC')
@@ -1246,10 +1311,9 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
         if 'orders' in graf_info:
             executed_orders_df = pd.DataFrame(executed_orders_df)
             # adicionando marcadores com as ordens de compra e venda
-            executed_orders_df['time_stamp'] = (
-                pd.to_datetime(executed_orders_df['time_stamp'])
-                .dt.tz_localize('America/Sao_Paulo')
-            )
+            executed_orders_df['time_stamp'] = pd.to_datetime(
+                executed_orders_df['time_stamp']
+            ).dt.tz_localize('America/Sao_Paulo')
             executed_orders_df = executed_orders_df[
                 (executed_orders_df['time_stamp'] >= minutes_ago)
                 & (executed_orders_df['time_stamp'] <= now)
