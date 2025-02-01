@@ -30,14 +30,20 @@ console = console.Console()
 
 
 def save_price_to_csv(ticker_json):
-    df_precos = pd.read_csv(PRICE_FILE)
-    if (
-        ticker_json['last'] != df_precos['last'].iloc[-1]
-        or ticker_json['timestamp'][:-3]
-        != df_precos['timestamp'].iloc[-1][:-3]
-    ):
-        df_precos = df_precos._append(ticker_json, ignore_index=True)
-        df_precos.to_csv(PRICE_FILE, index=False)
+    try:
+        df_precos = pd.read_csv(PRICE_FILE)
+        if (
+            ticker_json['last'] != df_precos['last'].iloc[-1]
+            or ticker_json['timestamp'][:-3]
+            != df_precos['timestamp'].iloc[-1][:-3]
+        ):
+            df_precos = df_precos._append(ticker_json, ignore_index=True)
+            df_precos.to_csv(PRICE_FILE, index=False)
+    except Exception as e:
+        if 'No columns to parse from file' in str(e):
+            df_precos = pd.DataFrame([ticker_json])
+
+    df_precos.to_csv(PRICE_FILE, index=False)
 
 
 def save_balance_to_csv(balance_json):
@@ -81,6 +87,7 @@ def main():
                     execute_trade(ticker_json, balance, executed_orders)
                     break  # Success, exit retry loop
                 except Exception as e:
+                    console.print_exception()
                     if 'timed out' in str(e) or 'ConnectionError' in str(e):
                         if attempt < max_retries - 1:
                             print(

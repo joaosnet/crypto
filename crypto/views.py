@@ -13,7 +13,6 @@ from dash.exceptions import PreventUpdate
 from dash_iconify import DashIconify
 from mitosheet.mito_dash.v1 import Spreadsheet, mito_callback
 from plotly.subplots import make_subplots
-from timescaledb import read_from_db
 
 from crypto import app, dash_utils
 from crypto.api_binance import get_klines
@@ -22,6 +21,7 @@ from crypto.bot import get_interval
 from crypto.componentes_personalizados import (
     bar_precos_atuais,
 )
+from crypto.timescaledb import read_from_db
 
 try:
     from crypto.segredos import CAMINHO
@@ -1272,10 +1272,10 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                 .dt.tz_localize('UTC')
                 .dt.tz_convert('America/Sao_Paulo')
             )
-            df_bity = df_bity[
-                (df_bity['timestamp'] >= minutes_ago)
-                & (df_bity['timestamp'] <= now)
-            ]
+            # df_bity = df_bity[
+            #     (df_bity['timestamp'] >= minutes_ago)
+            #     & (df_bity['timestamp'] <= now)
+            # ]
 
         if 'bity_candlestick' in graf_info:
             fig1.add_trace(

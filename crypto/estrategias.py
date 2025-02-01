@@ -6,7 +6,8 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 import talib as ta
-from memory_profiler import profile
+
+# from memory_profiler import profile
 from rich import console
 from rich.logging import RichHandler
 from timescaledb import read_from_db, save_from_db
@@ -62,46 +63,64 @@ MAX_DAILY_TRADES = 100
 
 def get_price_history(symbol='BTC_BRL', interval='1'):
     """
-    Obtém o histórico de preços da Binance para o símbolo especificado.
+    Obtém o histórico de preços combinando dados do TimescaleDB e BitPreco.
     """
     try:
+        # Buscar dados históricos do banco
+        df_bitpreco = read_from_db(
+            start_date=datetime.now().date()
+            - pd.Timedelta(days=BACKTEST_DAYS),
+            end_date=datetime.now().date(),
+        )
+        # print(df_bitpreco)
+        if df_bitpreco is not None and not df_bitpreco.empty:
+            # Garantir que timestamp está no formato correto
+            df_bitpreco['timestamp'] = pd.to_datetime(df_bitpreco['timestamp'])
+            if df_bitpreco['timestamp'].dt.tz is None:
+                df_bitpreco['timestamp'] = df_bitpreco[
+                    'timestamp'
+                ].dt.tz_localize('UTC')
+
+            # Pegar o último timestamp do banco
+            last_timestamp = df_bitpreco['timestamp'].max()
+            from_timestamp = int(last_timestamp.timestamp())
+        else:
+            # Se não há dados no banco, buscar período padrão
+            from_timestamp = int(datetime.now().timestamp()) - 1184400
+            df_bitpreco = pd.DataFrame()
+
+        # Buscar dados mais recentes da API
         klines1 = fetch_bitpreco_history(
             symbol=symbol,
             resolution=interval,
             time_range={
-                'from': int(datetime.now().timestamp()) - 1184400,
+                'from': from_timestamp,
                 'to': int(datetime.now().timestamp()),
             },
             countback=0,
         )
-        df_bitpreco = read_from_db()
 
-        df_bitpreco['timestamp'] = pd.to_datetime(
-            df_bitpreco['timestamp'], format='ISO8601'
-        )
-        if df_bitpreco['timestamp'].dt.tz is None:
-            df_bitpreco['timestamp'] = df_bitpreco['timestamp'].dt.tz_localize(
-                'UTC'
+        if klines1 is not None and not klines1.empty:
+            # Garantir que timestamp está no formato correto
+            klines1['timestamp'] = pd.to_datetime(klines1['timestamp'])
+            if klines1['timestamp'].dt.tz is None:
+                klines1['timestamp'] = klines1['timestamp'].dt.tz_localize(
+                    'UTC'
+                )
+
+            # Concatenar os dataframes removendo duplicatas
+            df_final = pd.concat([df_bitpreco, klines1], ignore_index=True)
+            df_final = df_final.drop_duplicates(
+                subset=['timestamp'], keep='last'
             )
-        df_bitpreco['timestamp'] = df_bitpreco['timestamp'].dt.tz_convert(
-            'UTC'
-        )
 
-        klines1['timestamp'] = pd.to_datetime(
-            klines1['timestamp'], format='ISO8601'
-        )
-        if klines1['timestamp'].dt.tz is None:
-            klines1['timestamp'] = klines1['timestamp'].dt.tz_localize('UTC')
-        klines1['timestamp'] = klines1['timestamp'].dt.tz_convert('UTC')
+            # Ordenar por timestamp
+            df_final = df_final.sort_values('timestamp')
 
-        # Filter out duplicate timestamps
-        df_bitpreco = df_bitpreco[
-            ~df_bitpreco['timestamp'].isin(klines1['timestamp'])
-        ]
+            return df_final
 
-        # Concatenate dataframes
-        df_bitpreco = pd.concat([df_bitpreco, klines1], ignore_index=True)
         return df_bitpreco
+
     except Exception as e:
         logger.error(f'Erro ao obter histórico de preços: {e}')
         console.print_exception()
@@ -159,12 +178,54 @@ def calculate_indicators(df):
 
 
 def generate_signals(df):
-    """
-    Gera sinais de compra e venda baseados em múltiplos indicadores
-    """
+    """Gera sinais de compra e venda com tratamento adequado de tipos"""
+    # Criar cópia explícita do DataFrame
     df = df.copy()
-    df['signal'] = 0
-    df['position'] = 0
+
+    # Garantir tipos corretos para colunas numéricas antes de calcular
+    numeric_columns = [
+        'close',
+        'open',
+        'high',
+        'low',
+        'volume',
+        'EMA_5',
+        'EMA_10',
+        'EMA_20',
+        'EMA_200',
+        'macd',
+        'macd_signal',
+        'MACD_hist',
+        'rsi',
+        'bb_upper',
+        'bb_middle',
+        'bb_lower',
+        'STOCH_K',
+        'STOCH_D',
+        'volume_sma',
+        'atr',
+    ]
+
+    # Converter colunas numéricas para float de forma segura
+    for col in numeric_columns:
+        if col in df.columns:
+            df.loc[:, col] = pd.to_numeric(df[col], errors='coerce').astype(
+                'float64'
+            )
+
+    # Inicializar colunas inteiras com valores padrão
+    integer_columns = ['signal', 'position', 'EMA_cross', 'MACD_cross']
+    for col in integer_columns:
+        # Garantir que a coluna existe e está inicializada como inteiro
+        if col not in df.columns:
+            df[col] = pd.Series(0, index=df.index, dtype='int64')
+        else:
+            # Converter para float primeiro, então para int
+            df[col] = (
+                pd.to_numeric(df[col], errors='coerce')
+                .fillna(0)
+                .astype('int64')
+            )
 
     # Parâmetros
     RSI_OVERBOUGHT = 70
@@ -235,6 +296,19 @@ def generate_signals(df):
         'Valores de posição inválidos'
     )
 
+    # Garantir tipos corretos antes de salvar - versão melhorada
+    for col in integer_columns:
+        # Converter valores não inteiros para 0 e garantir tipo int64
+        df[col] = df[col].apply(
+            lambda x: 0
+            if pd.isna(x) or not isinstance(x, (int, np.integer))
+            else x
+        )
+        df[col] = df[col].astype('int64')
+
+    # Garantir que trend seja texto e não tenha valores nulos
+    df['trend'] = df['trend'].fillna('neutral').astype(str)
+
     # Salvar dados
     save_from_db(df)
 
@@ -287,7 +361,7 @@ def validate_trade_conditions(
 
 
 # Função para executar a estratégia de negociação com controle de risco
-@profile
+# @profile
 def execute_trade(ticker_json, balance, executed_orders):
     """
     Executa operações com melhor gerenciamento de risco

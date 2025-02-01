@@ -3,7 +3,11 @@ from datetime import datetime
 
 import pandas as pd
 import requests
-from segredos import CAMINHO
+
+try:
+    from segredos import CAMINHO
+except ImportError:
+    from crypto.segredos import CAMINHO
 
 BASE_URLS = [
     'https://api.binance.com',

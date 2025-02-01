@@ -4,6 +4,7 @@ from api_bitpreco import dataset_bitpreco
 from psycopg2.extras import execute_batch
 from rich import print
 from segredos import DATABASE, HOST, PASSWORD, PORT, USER
+from sqlalchemy import create_engine
 
 
 def connect_db():
@@ -22,6 +23,13 @@ def connect_db():
         raise Exception(f'Erro de conexão: {e}')
 
 
+def get_engine():
+    """Cria engine SQLAlchemy para conexão com o banco"""
+    return create_engine(
+        f'postgresql://{USER}:{PASSWORD}@{HOST}:{PORT}/{DATABASE}'
+    )
+
+
 def setup_hypertable(conn, table_name: str):
     """Configura uma hypertable para dados temporais"""
     with conn.cursor() as cur:
@@ -29,31 +37,32 @@ def setup_hypertable(conn, table_name: str):
         cur.execute(f"""
             CREATE TABLE IF NOT EXISTS {table_name} (
                 timestamp TIMESTAMPTZ NOT NULL,
-                close NUMERIC,
-                open NUMERIC,
-                high NUMERIC,
-                low NUMERIC,
-                volume NUMERIC,
-                ema_5 NUMERIC,
-                ema_10 NUMERIC,
-                ema_20 NUMERIC,
-                ema_200 NUMERIC,
-                macd NUMERIC,
-                macd_signal NUMERIC,
-                macd_hist NUMERIC,
-                rsi NUMERIC,
-                bb_upper NUMERIC,
-                bb_middle NUMERIC,
-                bb_lower NUMERIC,
-                stoch_k NUMERIC,
-                stoch_d NUMERIC,
-                volume_sma NUMERIC,
-                atr NUMERIC,
-                signal INTEGER,
-                position INTEGER,
+                close NUMERIC(18,8),
+                open NUMERIC(18,8),
+                high NUMERIC(18,8),
+                low NUMERIC(18,8),
+                volume NUMERIC(18,8),
+                ema_5 NUMERIC(18,8),
+                ema_10 NUMERIC(18,8),
+                ema_20 NUMERIC(18,8),
+                ema_200 NUMERIC(18,8),
+                macd NUMERIC(18,8),
+                macd_signal NUMERIC(18,8),
+                macd_hist NUMERIC(18,8),
+                rsi NUMERIC(18,8),
+                bb_upper NUMERIC(18,8),
+                bb_middle NUMERIC(18,8),
+                bb_lower NUMERIC(18,8),
+                stoch_k NUMERIC(18,8),
+                stoch_d NUMERIC(18,8),
+                volume_sma NUMERIC(18,8),
+                atr NUMERIC(18,8),
+                signal BIGINT,
+                position BIGINT,
                 trend TEXT,
-                ema_cross INTEGER,
-                macd_cross INTEGER
+                ema_cross BIGINT,
+                macd_cross BIGINT,
+                CONSTRAINT crypto_data_unique_timestamp UNIQUE (timestamp)
             )
         """)
 
@@ -82,6 +91,43 @@ def migrate_to_db(symbol: str = 'BTC_BRL', resolution: str = '1'):
         print('Nenhum dado obtido da API BitPreco')
         return
 
+    # Reordenar colunas do DataFrame para corresponder à ordem da query SQL
+    columns = [
+        'timestamp',
+        'close',
+        'open',
+        'high',
+        'low',
+        'volume',
+        'ema_5',
+        'ema_10',
+        'ema_20',
+        'ema_200',
+        'macd',
+        'macd_signal',
+        'macd_hist',
+        'rsi',
+        'bb_upper',
+        'bb_middle',
+        'bb_lower',
+        'stoch_k',
+        'stoch_d',
+        'volume_sma',
+        'atr',
+        'signal',
+        'position',
+        'trend',
+        'ema_cross',
+        'macd_cross',
+    ]
+
+    # Garantir que todas as colunas existam
+    for col in columns:
+        if col not in df.columns:
+            df[col] = None
+
+    df = df[columns]
+
     # Configurar tabela
     setup_hypertable(conn, 'crypto_data')
 
@@ -94,7 +140,14 @@ def migrate_to_db(symbol: str = 'BTC_BRL', resolution: str = '1'):
             bb_upper, bb_middle, bb_lower,
             stoch_k, stoch_d, volume_sma, atr,
             signal, position, trend, ema_cross, macd_cross
-        ) VALUES %s
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s,
+            %s, %s, %s, %s,
+            %s, %s, %s, %s,
+            %s, %s, %s,
+            %s, %s, %s, %s,
+            %s, %s, %s, %s, %s
+        )
         ON CONFLICT (timestamp) DO UPDATE SET
             close = EXCLUDED.close,
             open = EXCLUDED.open,
@@ -123,9 +176,27 @@ def migrate_to_db(symbol: str = 'BTC_BRL', resolution: str = '1'):
             macd_cross = EXCLUDED.macd_cross
     """
 
+    # Converter DataFrame em lista de tuplas com verificação
+    records = []
+    for row in df.itertuples(index=False):
+        if len(row) != len(columns):
+            print(
+                'Aviso: Linha ignorada -'
+                + f' número incorreto de campos: {len(row)} vs {len(columns)}'
+            )
+            continue
+        records.append(row)
+
+    if not records:
+        print('Erro: Nenhum registro válido para inserir')
+        return
+
+    # Debug info
+    print(f'Número de colunas na query: {insert_query.count("%s")}')
+    print(f'Número de campos em cada registro: {len(records[0])}')
+
     # Inserir dados em lotes
-    batch_size = 1000
-    records = df.to_dict('records')
+    batch_size = min(1000, len(records))
 
     with conn.cursor() as cur:
         execute_batch(cur, insert_query, records, page_size=batch_size)
@@ -135,35 +206,97 @@ def migrate_to_db(symbol: str = 'BTC_BRL', resolution: str = '1'):
 
 
 def read_from_db(start_date: str = None, end_date: str = None) -> pd.DataFrame:
-    """Lê dados do TimescaleDB com filtro de data"""
+    """Lê dados do TimescaleDB com filtro de data usando SQLAlchemy"""
+    engine = get_engine()
 
     if not start_date or not end_date:
         query = """
             SELECT * FROM crypto_data
             ORDER BY timestamp
         """
+        df = pd.read_sql_query(query, engine)
     else:
         query = """
             SELECT * FROM crypto_data
-            WHERE timestamp BETWEEN %s AND %s
+            WHERE timestamp BETWEEN %(start)s AND %(end)s
             ORDER BY timestamp
         """
-
-    conn = connect_db()
-    df = pd.read_sql_query(
-        query, conn, params=(start_date, end_date), parse_dates=['timestamp']
-    )
-    conn.close()
+        df = pd.read_sql_query(
+            query,
+            engine,
+            params={'start': start_date, 'end': end_date},
+            parse_dates=['timestamp'],
+        )
 
     return df
 
 
 def save_from_db(data: pd.DataFrame):
-    # Salva os novos dados no banco de dados
+    """Salva dados no TimescaleDB com tratamento adequado de valores nulos"""
+    # Criar cópia explícita do DataFrame
+    data = data.copy()
+
+    # Aplicar as mesmas correções do migrate_to_db
+    columns = [
+        'timestamp',
+        'close',
+        'open',
+        'high',
+        'low',
+        'volume',
+        'ema_5',
+        'ema_10',
+        'ema_20',
+        'ema_200',
+        'macd',
+        'macd_signal',
+        'macd_hist',
+        'rsi',
+        'bb_upper',
+        'bb_middle',
+        'bb_lower',
+        'stoch_k',
+        'stoch_d',
+        'volume_sma',
+        'atr',
+        'signal',
+        'position',
+        'trend',
+        'ema_cross',
+        'macd_cross',
+    ]
+
+    # Garantir que todas as colunas existam e criar novo DataFrame
+    new_data = pd.DataFrame(columns=columns)
+    for col in columns:
+        if col in data.columns:
+            new_data[col] = data[col]
+        else:
+            new_data[col] = None
+
+    # Substituir o DataFrame original pelo novo
+    data = new_data
+
     conn = connect_db()
 
-    # Preparar query de inserção com todas as colunas
+    # Converter NaN/NA para None e garantir tipos corretos
+    for col in data.columns:
+        if col == 'timestamp':
+            continue
+        if data[col].dtype == 'Int64':
+            # Converter IntegerNA para int comum
+            data.loc[:, col] = data[col].fillna(0).astype('int64')
+        elif data[col].dtype == 'float64':
+            # Substituir NaN por None para dados decimais
+            data.loc[:, col] = data[col].where(pd.notnull(data[col]), None)
+        elif data[col].dtype == 'object':
+            # Substituir NA/empty strings por None para texto
+            data.loc[:, col] = data[col].where(
+                data[col].notna() & (data[col] != ''),  # noqa: PLC1901
+                None,
+            )
 
+    # Mesma query de inserção do migrate_to_db
     insert_query = """
         INSERT INTO crypto_data (
             timestamp, close, open, high, low, volume,
@@ -172,7 +305,14 @@ def save_from_db(data: pd.DataFrame):
             bb_upper, bb_middle, bb_lower,
             stoch_k, stoch_d, volume_sma, atr,
             signal, position, trend, ema_cross, macd_cross
-        ) VALUES %s
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s,
+            %s, %s, %s, %s,
+            %s, %s, %s, %s,
+            %s, %s, %s,
+            %s, %s, %s, %s,
+            %s, %s, %s, %s, %s
+        )
         ON CONFLICT (timestamp) DO UPDATE SET
             close = EXCLUDED.close,
             open = EXCLUDED.open,
@@ -201,9 +341,17 @@ def save_from_db(data: pd.DataFrame):
             macd_cross = EXCLUDED.macd_cross
     """
 
-    # Inserir dados em lotes
-    batch_size = 1000
-    records = data.to_dict('records')
+    # Converter DataFrame para lista de tuplas após tratamento
+    records = [
+        tuple(None if pd.isna(val) or val is pd.NA else val for val in row)
+        for row in data.values
+    ]
+
+    if not records:
+        print('Erro: Nenhum registro válido para inserir')
+        return
+
+    batch_size = min(1000, len(records))
 
     with conn.cursor() as cur:
         execute_batch(cur, insert_query, records, page_size=batch_size)
@@ -213,6 +361,6 @@ def save_from_db(data: pd.DataFrame):
 
 
 if __name__ == '__main__':
-    migrate_to_db()
+    # migrate_to_db()
     df = read_from_db('2025-01-26', '2025-01-27')
-    print(df.head())
+    print(df)

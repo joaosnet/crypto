@@ -29,6 +29,7 @@ dependencies = [
     "multiprocess>=0.70.17",
     "psutil>=5.9.8",
     "psycopg2-binary>=2.9.10",
+    "sqlalchemy>=2.0.36",
 ]
 
 [tool.uv]
