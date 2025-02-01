@@ -7,6 +7,13 @@ import httpx
 import pandas as pd
 from rich import print
 from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeRemainingColumn,
+)
 
 try:
     from crypto.segredos import CAMINHO, auth_token
@@ -114,26 +121,37 @@ def fetch_bitpreco_history(
         response = httpx.get(url, params=params, headers=headers)
         response.raise_for_status()
         data = response.json()
-        data = pd.DataFrame(data)
-        data.drop(columns=['s'], inplace=True)
-        data.rename(
-            columns={
-                't': 'timestamp',
-                'o': 'open',
-                'c': 'close',
-                'h': 'high',
-                'l': 'low',
-                'v': 'volume',
-            },
-            inplace=True,
-        )
-        data['timestamp'] = pd.to_datetime(data['timestamp'], unit='s')
-        data['timestamp'] = (
-            data['timestamp']
+
+        # Verificar se a resposta contém as chaves esperadas
+        if not all(key in data for key in ['t', 'o', 'c', 'h', 'l', 'v', 's']):
+            # Debugar a resposta
+            # print(f'[yellow]Resposta da API:[/yellow] {data}')
+            # print(
+            #     '[red]Resposta da API não contém '
+            #     + 'todas as chaves esperadas[/red]'
+            # )
+            return None
+
+        # Criar o DataFrame com os dados organizados em colunas
+        df = pd.DataFrame({
+            'timestamp': data['t'],
+            'open': data['o'],
+            'close': data['c'],
+            'high': data['h'],
+            'low': data['l'],
+            'volume': data['v'],
+        })
+
+        # Converter timestamp para datetime
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
+        df['timestamp'] = (
+            df['timestamp']
             .dt.tz_localize('UTC')
             .dt.tz_convert('America/Sao_Paulo')
         )
-        return data
+
+        return df
+
     except httpx.RequestError as exc:
         print(f'[red]Erro na requisição:[/red] {exc}')
     except httpx.HTTPStatusError as exc:
@@ -166,36 +184,52 @@ def dataset_bitpreco(
 ) -> pd.DataFrame:
     # Set the starting timestamp (e.g., September 1, 2017)
     start_time = int(datetime(2017, 9, 1).timestamp())
-
-    # Get the current timestamp
     end_time = int(time.time())
-
-    # Initialize a list to store data frames
     data_frames = []
-
-    # Use the fixed interval of 1184400 seconds
     interval = 1184400
 
-    # Loop over the time range
-    current_time = start_time
-    while current_time < end_time:
-        try:
-            next_time = min(current_time + interval, end_time)
-            df = fetch_bitpreco_history(
-                symbol=symbol,
-                resolution=resolution,
-                time_range={'from': current_time, 'to': next_time},
-                countback=0,
-                currency_code='BRL',
-            )
-            if df is not None:
-                data_frames.append(df)
-            current_time = next_time
-            time.sleep(1)  # Respect API rate limits
-        except Exception as e:
-            print(f'Error at timestamp {current_time}: {e}')
-            current_time += interval
-            continue
+    # Calcular o número total de iterações
+    total_iterations = (end_time - start_time) // interval + 1
+
+    # Configurar a barra de progresso customizada
+    progress = Progress(
+        SpinnerColumn(),
+        TextColumn('[progress.description]{task.description}'),
+        BarColumn(),
+        TextColumn('[progress.percentage]{task.percentage:>3.0f}%'),
+        TimeRemainingColumn(),
+    )
+
+    with progress:
+        # Adicionar a tarefa principal
+        task = progress.add_task(
+            f'[cyan]Coletando dados históricos ({symbol})',
+            total=total_iterations,
+        )
+
+        current_time = start_time
+        while current_time < end_time:
+            try:
+                next_time = min(current_time + interval, end_time)
+                df = fetch_bitpreco_history(
+                    symbol=symbol,
+                    resolution=resolution,
+                    time_range={'from': current_time, 'to': next_time},
+                    countback=0,
+                    currency_code='BRL',
+                )
+                if df is not None:
+                    data_frames.append(df)
+                current_time = next_time
+                progress.advance(task)  # Avança a barra de progresso
+                time.sleep(1)  # Respect API rate limits
+            except Exception as e:
+                progress.console.print(
+                    f'[red]Error at timestamp {current_time}: {e}[/red]'
+                )
+                current_time += interval
+                progress.advance(task)  # Avança mesmo em caso de erro
+                continue
 
     # Combine all data frames into one
     if data_frames:

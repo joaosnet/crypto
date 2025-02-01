@@ -3,13 +3,19 @@ import psycopg2
 from api_bitpreco import dataset_bitpreco
 from psycopg2.extras import execute_batch
 from rich import print
-from segredos import POSTGRES_CONNECTION
+from segredos import DATABASE, HOST, PASSWORD, PORT, USER
 
 
 def connect_db():
     """Estabelece conexão com o TimescaleDB"""
     try:
-        conn = psycopg2.connect(POSTGRES_CONNECTION)
+        conn = psycopg2.connect(
+            dbname=DATABASE,
+            user=USER,
+            password=PASSWORD,
+            host=HOST,
+            port=PORT,
+        )
         conn.autocommit = True
         return conn
     except psycopg2.Error as e:
@@ -207,5 +213,6 @@ def save_from_db(data: pd.DataFrame):
 
 
 if __name__ == '__main__':
-    df = read_from_db('BTCBRL', '2025-01-26', '2025-01-27')
+    migrate_to_db()
+    df = read_from_db('2025-01-26', '2025-01-27')
     print(df.head())

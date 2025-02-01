@@ -528,7 +528,7 @@ requires-dist = [
     { name = "rich", specifier = ">=13.9.4" },
     { name = "scipy", specifier = ">=1.14.0" },
     { name = "sympy", specifier = ">=1.13.2" },
-    { name = "ta-lib", specifier = ">=0.6.0" },
+    { name = "ta-lib", specifier = "==0.6.1" },
     { name = "yfinance", specifier = ">=0.2.43" },
 ]
 
@@ -2342,13 +2342,13 @@ wheels = [
 
 [[package]]
 name = "ta-lib"
-version = "0.6.0"
+version = "0.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
     { name = "setuptools" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/db/f4/1aeda18ba6f08826a45545e253f874715355eeb36a98aa7cde487a08541d/ta_lib-0.6.0.tar.gz", hash = "sha256:b66f3bcdc4a787731d0aa82af72f60d74aa0d1705d0e702da3b1cf48343e7e90", size = 371950 }
+sdist = { url = "https://files.pythonhosted.org/packages/5c/66/1cf7f10986a43bee4c72249396675b44e38167638e3bebe00f19e903548b/ta_lib-0.6.1.tar.gz", hash = "sha256:5629c82ea201375597e44713c169e1d62f18bb2309266865a941eeae76777a18", size = 372301 }
 
 [[package]]
 name = "taskipy"

@@ -22,6 +22,13 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 
 POSTGRES_CONNECTION = os.getenv('POSTGRES_CONNECTION')
 
+DBNAME = os.getenv('DBNAME')
+DATABASE = os.getenv('DATABASE')
+USER = os.getenv('USER')
+PASSWORD = os.getenv('PASSWORD')
+HOST = os.getenv('HOST')
+PORT = os.getenv('PORT')
+
 # gerador de chaves aleatórias
 if __name__ == '__main__':
     import os

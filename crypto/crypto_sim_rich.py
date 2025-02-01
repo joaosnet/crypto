@@ -90,8 +90,10 @@ def main():  # noqa: PLR0914
             num_trades_prejuizo_crypto,
         )
 
-        title = f"""Simulação com [bold magenta]{multiplicador}x
-        [/bold magenta] (Multiplicador de Risco/Objetivo)"""
+        title = (
+            f'Simulação com [bold magenta]{multiplicador}x'
+            + '[/bold magenta] (Multiplicador de Risco/Objetivo)'
+        )
         table = Table(
             title=title, title_style='bold cyan', header_style='bold blue'
         )
