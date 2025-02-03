@@ -1,20 +1,20 @@
-import json
 import time
 
 import pandas as pd
+from compartilhado import get_coinpair, get_interval
 from rich import console, print
 
 try:
-    from crypto.api_bitpreco import (
+    from api_bitpreco import Balance, ExecutedOrders, Ticker
+    from estrategias import execute_trade
+
+except ImportError:  # noqa: E722
+    from .api_bitpreco import (
         Balance,
         ExecutedOrders,
         Ticker,
-        get_coinpair,
     )
-    from crypto.estrategias import execute_trade
-except:  # noqa: E722
-    from api_bitpreco import Balance, ExecutedOrders, Ticker, get_coinpair
-    from estrategias import execute_trade
+    from .estrategias import execute_trade
 
 try:
     from crypto.segredos import CAMINHO
@@ -24,7 +24,6 @@ except ImportError:
 PRICE_FILE = CAMINHO + '/ticker.csv'
 BALANCE_FILE = CAMINHO + '/balance.csv'
 ORDERS_FILE = CAMINHO + '/executed_orders.csv'
-INTERVAL_FILE = CAMINHO + '/interval.json'
 
 console = console.Console()
 
@@ -54,18 +53,6 @@ def save_balance_to_csv(balance_json):
 def save_orders_to_csv(orders_json):
     orders_df = pd.DataFrame(orders_json)
     orders_df.to_csv(ORDERS_FILE, index=False)
-
-
-def get_interval():
-    try:
-        with open(INTERVAL_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            return data.get(
-                'interval', 30
-            )  # Valor padrão de 30 segundos se não houver arquivo
-
-    except FileNotFoundError:
-        return 30  # Valor padrão de 30 segundos se o arquivo não existir
 
 
 def main():

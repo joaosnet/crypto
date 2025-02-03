@@ -17,10 +17,11 @@ from plotly.subplots import make_subplots
 from crypto import app, dash_utils
 from crypto.api_binance import get_klines
 from crypto.api_bitpreco import Buy, Sell, carregar_opcoes_criptomoedas
-from crypto.bot import get_interval
+from crypto.compartilhado import get_interval
 from crypto.componentes_personalizados import (
     bar_precos_atuais,
 )
+from crypto.duckdb_csv import load_csv_in_dataframe, load_csv_in_records
 from crypto.timescaledb import read_from_db
 
 try:
@@ -30,7 +31,6 @@ except ImportError:
 
 # Diskcache
 import diskcache
-import duckdb as dd
 from dash.long_callback import DiskcacheLongCallbackManager
 from rich import print  # noqa: F401
 
@@ -847,23 +847,23 @@ painel_alertas = dmc.Card(
                                     children=dmc.Group(
                                         [
                                             dmc.Checkbox(
-                                                label='EMA 5', value='EMA_5'
+                                                label='EMA 5', value='ema_5'
                                             ),
                                             dmc.Checkbox(
-                                                label='EMA 10', value='EMA_10'
+                                                label='EMA 10', value='ema_10'
                                             ),
                                             dmc.Checkbox(
-                                                label='EMA 20', value='EMA_20'
+                                                label='EMA 20', value='ema_20'
                                             ),
                                             dmc.Checkbox(
                                                 label='EMA 200',
-                                                value='EMA_200',
+                                                value='ema_200',
                                             ),
                                             dmc.Checkbox(
                                                 label='RSI', value='rsi'
                                             ),
                                             dmc.Checkbox(
-                                                label='MACD', value='macd'
+                                                label='macd', value='macd'
                                             ),
                                             dmc.Checkbox(
                                                 label='Bandas de Bollinger',
@@ -1029,20 +1029,8 @@ def update_df_precos(_):
     # df_precos = pd.read_csv(PRICE_FILE)
     # return df_precos.to_dict('records')
     # Leitura do arquivo CSV usando DuckDB
-    con = dd.connect()
-    query = f"SELECT * FROM read_csv_auto('{PRICE_FILE}')"
-    result = con.execute(query).fetchall()
 
-    # Obtenção dos nomes das colunas
-    column_names = [desc[0] for desc in con.description]
-
-    # Conversão para uma lista de dicionários
-    data = [dict(zip(column_names, row)) for row in result]
-
-    # Fechando a conexão
-    con.close()
-
-    return data
+    return load_csv_in_records(PRICE_FILE)
 
 
 @app.callback(
@@ -1183,9 +1171,9 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                 domain=[0, 0.2],  # Make volume chart 20% of height on bottom
                 anchor='x',
             ),
-            # Eixo para MACD
+            # Eixo para macd
             yaxis3=dict(
-                title='MACD',
+                title='macd',
                 titlefont=dict(color='orange'),
                 tickfont=dict(color='orange'),
                 anchor='free',
@@ -1251,10 +1239,10 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                 )
             )
         indicadores_tecnicos = [
-            'EMA_5',
-            'EMA_10',
-            'EMA_20',
-            'EMA_200',
+            'ema_5',
+            'ema_10',
+            'ema_20',
+            'ema_200',
             'rsi',
             'macd',
             'bbands',
@@ -1265,7 +1253,11 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
         if 'bity_candlestick' in graf_info or any(
             indicador in indicadores for indicador in indicadores_tecnicos
         ):
-            df_bity = read_from_db(start_date=minutes_ago, end_date=now)
+            df_bity = load_csv_in_dataframe(
+                'crypto/db/BTC_BRL_bitpreco.csv',
+                start_date=minutes_ago,
+                end_date=now,
+            )
 
             df_bity['timestamp'] = (
                 pd.to_datetime(df_bity['timestamp'])
@@ -1346,44 +1338,44 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                     )
                 )
         # Add EMAs based on checkbox selection
-        if 'EMA_5' in indicadores:
+        if 'ema_5' in indicadores:
             fig1.add_trace(
                 go.Scattergl(
                     x=df_bity['timestamp'],
-                    y=df_bity['EMA_5'],
+                    y=df_bity['ema_5'],
                     mode='lines',
                     name='EMA 5',
                     line=dict(color='blue', width=1),
                 )
             )
 
-        if 'EMA_10' in indicadores:
+        if 'ema_10' in indicadores:
             fig1.add_trace(
                 go.Scattergl(
                     x=df_bity['timestamp'],
-                    y=df_bity['EMA_10'],
+                    y=df_bity['ema_10'],
                     mode='lines',
                     name='EMA 10',
                     line=dict(color='red', width=1),
                 )
             )
 
-        if 'EMA_20' in indicadores:
+        if 'ema_20' in indicadores:
             fig1.add_trace(
                 go.Scattergl(
                     x=df_bity['timestamp'],
-                    y=df_bity['EMA_20'],
+                    y=df_bity['ema_20'],
                     mode='lines',
                     name='EMA 20',
                     line=dict(color='green', width=1),
                 )
             )
 
-        if 'EMA_200' in indicadores:
+        if 'ema_200' in indicadores:
             fig1.add_trace(
                 go.Scattergl(
                     x=df_bity['timestamp'],
-                    y=df_bity['EMA_200'],
+                    y=df_bity['ema_200'],
                     mode='lines',
                     name='EMA 200',
                     line=dict(color='purple', width=1),
@@ -1429,13 +1421,13 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
             )
 
         if 'macd' in indicadores:
-            # Add MACD line
+            # Add macd line
             fig1.add_trace(
                 go.Scatter(
                     x=df_bity['timestamp'],
                     y=df_bity['macd'],
                     mode='lines',
-                    name='MACD',
+                    name='macd',
                     yaxis='y3',
                     line=dict(color='orange', width=1),
                 )
@@ -1453,15 +1445,15 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                 )
             )
 
-            # Add MACD histogram with conditional colors
+            # Add macd histogram with conditional colors
             colors = [
-                'red' if hist < 0 else 'green' for hist in df_bity['MACD_hist']
+                'red' if hist < 0 else 'green' for hist in df_bity['macd_hist']
             ]
             fig1.add_trace(
                 go.Bar(
                     x=df_bity['timestamp'],
-                    y=df_bity['MACD_hist'],
-                    name='MACD Histogram',
+                    y=df_bity['macd_hist'],
+                    name='macd Histogram',
                     yaxis='y3',
                     marker_color=colors,
                 )
@@ -1504,7 +1496,7 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
             fig1.add_trace(
                 go.Scatter(
                     x=df_bity['timestamp'],
-                    y=df_bity['STOCH_K'],
+                    y=df_bity['stoch_k'],
                     mode='lines',
                     name='Stoch %K',
                     line=dict(color='blue', width=1),
@@ -1514,7 +1506,7 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
             fig1.add_trace(
                 go.Scatter(
                     x=df_bity['timestamp'],
-                    y=df_bity['STOCH_D'],
+                    y=df_bity['stoch_d'],
                     mode='lines',
                     name='Stoch %D',
                     line=dict(color='orange', width=1),

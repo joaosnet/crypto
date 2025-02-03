@@ -22,12 +22,12 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 
 POSTGRES_CONNECTION = os.getenv('POSTGRES_CONNECTION')
 
-DBNAME = os.getenv('DBNAME')
-DATABASE = os.getenv('DATABASE')
-USER = os.getenv('USER')
-PASSWORD = os.getenv('PASSWORD')
-HOST = os.getenv('HOST')
-PORT = os.getenv('PORT')
+DBNAME = os.getenv('DBNAME_timescaledb')
+DATABASE = os.getenv('DATABASE_timescaledb')
+USER = os.getenv('USER_timescaledb')
+PASSWORD = os.getenv('PASSWORD_timescaledb')
+HOST = os.getenv('HOST_timescaledb')
+PORT = os.getenv('PORT_timescaledb')
 
 # gerador de chaves aleatórias
 if __name__ == '__main__':

@@ -1,4 +1,3 @@
-import json
 import time
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -23,7 +22,6 @@ import re
 
 publicTradingApi = 'https://api.bitpreco.com/v1/trading/balance'
 
-COINPAIR_FILE = CAMINHO + '/coinpair.json'
 
 console = Console()
 
@@ -53,15 +51,6 @@ def carregar_opcoes_criptomoedas():
             'label': 'Bitcoin para Real',
         },
     ]
-
-
-def get_coinpair():
-    try:
-        with open(COINPAIR_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            return data.get('coinpair', 'BTC-BRL')
-    except FileNotFoundError:
-        return 'BTC-BRL'
 
 
 def fetch_bitpreco_history(
@@ -180,7 +169,7 @@ def fetch_bitpreco_history(
 
 # função que gera um dataset com os dados de histórico de preços da BitPreço
 def dataset_bitpreco(
-    symbol: str = 'BTC_BRL', resolution: str = '1'
+    symbol: str = 'BTC_BRL', resolution: str = '1', salvar_csv: bool = False
 ) -> pd.DataFrame:
     # Set the starting timestamp (e.g., September 1, 2017)
     start_time = int(datetime(2017, 9, 1).timestamp())
@@ -235,7 +224,12 @@ def dataset_bitpreco(
     if data_frames:
         full_df = pd.concat(data_frames, ignore_index=True)
         # Save the data to a timescaledb table
-        return full_df
+        if salvar_csv:
+            # transformando o timestamp para formato utc
+            full_df['timestamp'] = full_df['timestamp'].dt.tz_convert('UTC')
+            full_df.to_csv(f'{CAMINHO}/{symbol}_bitpreco.csv', index=False)
+        else:
+            return full_df
     else:
         print('No data was collected')
 
@@ -383,3 +377,7 @@ def Withdrawal(amount, currency, priority, blockchain, address):
     }
     response = httpx.post(url, data=payload)
     return response
+
+
+if __name__ == '__main__':
+    dataset_bitpreco(salvar_csv=True)

@@ -1,35 +1,37 @@
+import datetime as dt
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
 import talib as ta
+from compartilhado import get_coinpair
 
 # from memory_profiler import profile
 from rich import console
 from rich.logging import RichHandler
-from timescaledb import read_from_db, save_from_db
 
 try:
-    from crypto.segredos import CAMINHO
+    from duckdb_csv import load_csv_in_dataframe
+    # from timescaledb import read_from_db, save_from_db_optimized
 except ImportError:
-    from segredos import CAMINHO
+    from .duckdb_csv import load_csv_in_dataframe
+    # from .timescaledb import read_from_db, save_from_db_optimized
+
 
 try:
     from api_bitpreco import (
         Buy,
         Sell,
         fetch_bitpreco_history,
-        get_coinpair,
     )
 except ImportError:
     from crypto.api_bitpreco import (
         Buy,
         Sell,
         fetch_bitpreco_history,
-        get_coinpair,
     )
 
 # Configuração do logger sem as requisições HTTP
@@ -56,7 +58,6 @@ STOP_LOSS = 0.95  # Limite para stop-loss (5% abaixo do preço de compra)
 RSI_OVERSOLD = 30  # Limite inferior do RSI para compra
 
 # Configurações adicionais
-INTERVAL_FILE = CAMINHO + '/interval.json'
 BACKTEST_DAYS = 30
 MAX_DAILY_TRADES = 100
 
@@ -67,10 +68,12 @@ def get_price_history(symbol='BTC_BRL', interval='1'):
     """
     try:
         # Buscar dados históricos do banco
-        df_bitpreco = read_from_db(
-            start_date=datetime.now().date()
-            - pd.Timedelta(days=BACKTEST_DAYS),
-            end_date=datetime.now().date(),
+        end_date = datetime.now(dt.timezone.utc)
+        start_date = end_date - timedelta(days=BACKTEST_DAYS)  # último dia
+        df_bitpreco = load_csv_in_dataframe(
+            'crypto/db/BTC_BRL_bitpreco.csv',
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
         )
         # print(df_bitpreco)
         if df_bitpreco is not None and not df_bitpreco.empty:
@@ -107,6 +110,11 @@ def get_price_history(symbol='BTC_BRL', interval='1'):
                 klines1['timestamp'] = klines1['timestamp'].dt.tz_localize(
                     'UTC'
                 )
+            # Se estiver em outro fuso horário, converter para UTC
+            elif klines1['timestamp'].dt.tz.zone != 'UTC':
+                klines1['timestamp'] = klines1['timestamp'].dt.tz_convert(
+                    'UTC'
+                )
 
             # Concatenar os dataframes removendo duplicatas
             df_final = pd.concat([df_bitpreco, klines1], ignore_index=True)
@@ -140,13 +148,13 @@ def calculate_indicators(df):
     volume_arr = df['volume'].to_numpy(dtype=float)
 
     # EMAs
-    df['EMA_5'] = ta.EMA(close_arr, timeperiod=5)
-    df['EMA_10'] = ta.EMA(close_arr, timeperiod=10)
-    df['EMA_20'] = ta.EMA(close_arr, timeperiod=20)
-    df['EMA_200'] = ta.EMA(close_arr, timeperiod=200)
+    df['ema_5'] = ta.EMA(close_arr, timeperiod=5)
+    df['ema_10'] = ta.EMA(close_arr, timeperiod=10)
+    df['ema_20'] = ta.EMA(close_arr, timeperiod=20)
+    df['ema_200'] = ta.EMA(close_arr, timeperiod=200)
 
     # MACD
-    df['macd'], df['macd_signal'], df['MACD_hist'] = ta.MACD(
+    df['macd'], df['macd_signal'], df['macd_hist'] = ta.MACD(
         close_arr, fastperiod=12, slowperiod=26, signalperiod=9
     )
 
@@ -159,7 +167,7 @@ def calculate_indicators(df):
     )
 
     # Stochastic
-    df['STOCH_K'], df['STOCH_D'] = ta.STOCH(
+    df['stoch_k'], df['stoch_d'] = ta.STOCH(
         high_arr,
         low_arr,
         close_arr,
@@ -189,19 +197,19 @@ def generate_signals(df):
         'high',
         'low',
         'volume',
-        'EMA_5',
-        'EMA_10',
-        'EMA_20',
-        'EMA_200',
+        'ema_5',
+        'ema_10',
+        'ema_20',
+        'ema_200',
         'macd',
         'macd_signal',
-        'MACD_hist',
+        'macd_hist',
         'rsi',
         'bb_upper',
         'bb_middle',
         'bb_lower',
-        'STOCH_K',
-        'STOCH_D',
+        'stoch_k',
+        'stoch_d',
         'volume_sma',
         'atr',
     ]
@@ -214,7 +222,7 @@ def generate_signals(df):
             )
 
     # Inicializar colunas inteiras com valores padrão
-    integer_columns = ['signal', 'position', 'EMA_cross', 'MACD_cross']
+    integer_columns = ['signal', 'position', 'ema_cross', 'macd_cross']
     for col in integer_columns:
         # Garantir que a coluna existe e está inicializada como inteiro
         if col not in df.columns:
@@ -234,22 +242,22 @@ def generate_signals(df):
     STOCH_OVERSOLD = 20
 
     # Identificar tendência
-    df['trend'] = np.where(df['close'] > df['EMA_200'], 'alta', 'baixa')
+    df['trend'] = np.where(df['close'] > df['ema_200'], 'alta', 'baixa')
 
     # Cruzamentos
-    df['EMA_cross'] = np.where(
-        (df['EMA_5'] > df['EMA_10'])
-        & (df['EMA_5'].shift(1) <= df['EMA_10'].shift(1)),
+    df['ema_cross'] = np.where(
+        (df['ema_5'] > df['ema_10'])
+        & (df['ema_5'].shift(1) <= df['ema_10'].shift(1)),
         1,
         np.where(
-            (df['EMA_5'] < df['EMA_10'])
-            & (df['EMA_5'].shift(1) >= df['EMA_10'].shift(1)),
+            (df['ema_5'] < df['ema_10'])
+            & (df['ema_5'].shift(1) >= df['ema_10'].shift(1)),
             -1,
             0,
         ),
     )
 
-    df['MACD_cross'] = np.where(
+    df['macd_cross'] = np.where(
         (df['macd'] > df['macd_signal'])
         & (df['macd'].shift(1) <= df['macd_signal'].shift(1)),
         1,
@@ -263,20 +271,20 @@ def generate_signals(df):
 
     # Sinais de compra - agora precisa atender apenas 3 das 5 condições
     buy_signals = pd.DataFrame({
-        'ema_signal': (df['EMA_cross'] == 1),
-        'macd_signal': (df['MACD_cross'] == 1),
+        'ema_signal': (df['ema_cross'] == 1),
+        'macd_signal': (df['macd_cross'] == 1),
         'rsi_signal': (df['rsi'] < RSI_OVERSOLD),
         'bb_signal': (df['close'] <= df['bb_lower']),
-        'stoch_signal': (df['STOCH_K'] < STOCH_OVERSOLD),
+        'stoch_signal': (df['stoch_k'] < STOCH_OVERSOLD),
     })
 
     # Sinais de venda - agora precisa atender apenas 3 das 5 condições
     sell_signals = pd.DataFrame({
-        'ema_signal': (df['EMA_cross'] == -1),
-        'macd_signal': (df['MACD_cross'] == -1),
+        'ema_signal': (df['ema_cross'] == -1),
+        'macd_signal': (df['macd_cross'] == -1),
         'rsi_signal': (df['rsi'] > RSI_OVERBOUGHT),
         'bb_signal': (df['close'] >= df['bb_upper']),
-        'stoch_signal': (df['STOCH_K'] > STOCH_OVERBOUGHT),
+        'stoch_signal': (df['stoch_k'] > STOCH_OVERBOUGHT),
     })
 
     # Conta quantas condições são atendidas
@@ -284,9 +292,10 @@ def generate_signals(df):
     sell_count = sell_signals.sum(axis=1)
 
     # Gera sinais quando pelo menos 3 condições são atendidas
-    CONDICOES = 3
-    df.loc[buy_count >= CONDICOES, 'signal'] = SIGNAL_BUY
-    df.loc[sell_count >= CONDICOES, 'signal'] = SIGNAL_SELL
+    CONDICOES_COMPRA = 3
+    CONDICOES_VENDA = 3
+    df.loc[buy_count >= CONDICOES_COMPRA, 'signal'] = SIGNAL_BUY
+    df.loc[sell_count >= CONDICOES_VENDA, 'signal'] = SIGNAL_SELL
 
     # Calcular posições
     df['position'] = df['signal'].fillna(0)
@@ -310,7 +319,14 @@ def generate_signals(df):
     df['trend'] = df['trend'].fillna('neutral').astype(str)
 
     # Salvar dados
-    save_from_db(df)
+    # save_from_db_optimized(df)
+    # save_from_db(df)
+    df.to_csv(
+        'crypto/db/BTC_BRL_bitpreco.csv',
+        mode='a',
+        index=False,
+        header=False,
+    )
 
     return df
 
@@ -510,7 +526,7 @@ def analyze_trend(df: pd.DataFrame) -> str:
     DOWN_THRESHOLD = 0.5
 
     last_rows = df.tail(20)
-    trend_up = (last_rows['EMA_5'] > last_rows['EMA_10']).sum() / 20
+    trend_up = (last_rows['ema_5'] > last_rows['ema_10']).sum() / 20
 
     if trend_up > STRONG_UP_THRESHOLD:
         return 'STRONG_UP'
