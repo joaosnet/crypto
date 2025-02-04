@@ -1,3 +1,5 @@
+import json
+
 import duckdb
 
 try:
@@ -14,6 +16,26 @@ DEFAULT_COINPAIR = 'BTC-BRL'
 DEFAULT_INTERVAL = 30
 
 
+def coinpair_options():
+    try:
+        from api_bitpreco import Ticker  # noqa: PLC0415
+    except ImportError:
+        from crypto.api_bitpreco import Ticker  # noqa: PLC0415
+
+    response = Ticker().json()
+    markets = sorted(response.keys())
+    options = []
+    for market in markets:
+        # Convert market name from lowercase to uppercase with hyphen
+        value = market.upper().replace('_', '-')
+        # Get coin name (everything before -BRL)
+        coin = value.split('-')[0]
+        # Create formatted option dict
+        option = {'value': value, 'label': f'{coin} para Real'}
+        options.append(option)
+    return options
+
+
 def get_coinpair():
     try:
         # Consulta SQL para extrair o coinpair do arquivo JSON
@@ -26,6 +48,17 @@ def get_coinpair():
     except Exception as e:
         print(f'Erro ao ler {COINPAIR_FILE} com DuckDB: {e}')
         return DEFAULT_COINPAIR
+
+
+def set_coinpair(coinpair):
+    try:
+        data = {'coinpair': coinpair}
+        with open(COINPAIR_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception as e:
+        print(f'Erro ao atualizar {COINPAIR_FILE}: {e}')
+        return False
 
 
 def get_interval():

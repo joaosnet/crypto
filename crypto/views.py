@@ -16,13 +16,19 @@ from plotly.subplots import make_subplots
 
 from crypto import app, dash_utils
 from crypto.api_binance import get_klines
-from crypto.api_bitpreco import Buy, Sell, carregar_opcoes_criptomoedas
-from crypto.compartilhado import get_interval
+from crypto.api_bitpreco import Buy, Sell
+from crypto.compartilhado import (
+    coinpair_options,
+    get_coinpair,
+    get_interval,
+    set_coinpair,
+)
 from crypto.componentes_personalizados import (
     bar_precos_atuais,
 )
 from crypto.duckdb_csv import load_csv_in_dataframe, load_csv_in_records
-from crypto.timescaledb import read_from_db
+
+# from crypto.timescaledb import read_from_db
 
 try:
     from crypto.segredos import CAMINHO
@@ -145,10 +151,10 @@ controle_tempo = html.Div([
                                 ),
                                 mb=10,
                             ),
-                            dmc.MultiSelect(
-                                value=['BTC-BRL'],
+                            dmc.Select(
+                                value=get_coinpair(),
                                 id='filtro-cripto',
-                                data=carregar_opcoes_criptomoedas(),
+                                data=coinpair_options(),
                                 placeholder='Filtrar Criptomoedas',
                                 searchable=True,
                                 mb=10,
@@ -435,8 +441,8 @@ right_column = html.Div(
                                         label='Selecione o Mercado',
                                         placeholder='Selecione uma opção',  # noqa: E501
                                         id='market-compra',
-                                        value='BTC-BRL',
-                                        data=carregar_opcoes_criptomoedas(),
+                                        value=get_coinpair(),
+                                        data=coinpair_options(),
                                         mb=10,
                                     ),
                                     # botao de compra
@@ -549,8 +555,8 @@ right_column = html.Div(
                                         label='Selecione o Mercado',
                                         placeholder='Selecione uma opção',
                                         id='market-venda',
-                                        value='BTC-BRL',
-                                        data=carregar_opcoes_criptomoedas(),
+                                        value=get_coinpair(),
+                                        data=coinpair_options(),
                                         mb=10,
                                     ),
                                     # botao de venda
@@ -1049,6 +1055,42 @@ def update_df_executed_orders(n_intervals):
 def update_df_balance(n_intervals):
     balance_df = pd.read_csv(BALANCE_FILE).to_dict('records')
     return balance_df
+
+
+# Callback para atualizar a coinpair apartir dos filtros
+@app.callback(
+    [
+        Output('filtro-cripto', 'value'),
+        Output('market-compra', 'value'),
+        Output('market-venda', 'value'),
+    ],
+    [
+        Input('filtro-cripto', 'value'),
+        Input('market-compra', 'value'),
+        Input('market-venda', 'value'),
+    ],
+    prevent_initial_call=True,
+)
+def update_coinpair(filtro, compra, venda):
+    # Identifica qual input mudou
+    trigger = ctx.triggered[0]['prop_id'].split('.')[0]
+
+    # Define o novo valor baseado em qual input foi alterado
+    if trigger == 'filtro-cripto':
+        novo_valor = filtro
+    elif trigger == 'market-compra':
+        novo_valor = compra
+    elif trigger == 'market-venda':
+        novo_valor = venda
+    else:
+        novo_valor = get_coinpair()
+
+    # Atualiza o valor no arquivo de configuração
+    if novo_valor is not None:
+        set_coinpair(novo_valor)
+
+    # Retorna o mesmo valor para todos os campos
+    return novo_valor, novo_valor, novo_valor
 
 
 # Callback para atualizar os ícones das abas

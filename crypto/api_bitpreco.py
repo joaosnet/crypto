@@ -26,33 +26,6 @@ publicTradingApi = 'https://api.bitpreco.com/v1/trading/balance'
 console = Console()
 
 
-# Definindo a função para carregar opções de criptomoedas
-def carregar_opcoes_criptomoedas():
-    return [
-        {
-            'value': 'AAVE-BRL',
-            'label': 'AAVE para Real',
-        },
-        {
-            'value': 'ABFY-BRL',
-            'label': 'ABFY para Real',
-        },
-        {'value': 'ADA-BRL', 'label': 'ADA para Real'},
-        {'value': 'AKT-BRL', 'label': 'AKT para Real'},
-        {
-            'value': 'ALGO-BRL',
-            'label': 'ALGO para Real',
-        },
-        {'value': 'ZIL-BRL', 'label': 'ZIL para Real'},
-        {'value': 'ZK-BRL', 'label': 'ZK para Real'},
-        {'value': 'ZRO-BRL', 'label': 'ZRO para Real'},
-        {
-            'value': 'BTC-BRL',
-            'label': 'Bitcoin para Real',
-        },
-    ]
-
-
 def fetch_bitpreco_history(
     symbol: str = 'BTC_BRL',
     resolution: str = '1',
