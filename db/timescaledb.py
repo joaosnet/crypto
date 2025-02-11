@@ -9,10 +9,10 @@ from rich import print
 from sqlalchemy import create_engine
 
 try:
-    from api_bitpreco import dataset_bitpreco
+    from bot.apis.api_bitpreco import dataset_bitpreco
     from segredos import DATABASE, HOST, PASSWORD, PORT, USER
 except ImportError:
-    from .api_bitpreco import dataset_bitpreco
+    from ...bot.apis.api_bitpreco import dataset_bitpreco
     from .segredos import DATABASE, HOST, PASSWORD, PORT, USER
 
 

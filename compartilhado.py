@@ -2,15 +2,11 @@ import json
 
 import duckdb
 
-try:
-    from segredos import CAMINHO
-except ImportError:
-    from crypto.segredos import CAMINHO
+from bot.models.coin_pair import CoinPair, ExchangeType
+from segredos import CAMINHO
 
 COINPAIR_FILE = CAMINHO + '/coinpair.json'
-
 INTERVAL_FILE = CAMINHO + '/interval.json'
-
 
 DEFAULT_COINPAIR = 'BTC-BRL'
 DEFAULT_INTERVAL = 30
@@ -18,11 +14,13 @@ DEFAULT_INTERVAL = 30
 
 def coinpair_options():
     try:
-        from api_bitpreco import Ticker  # noqa: PLC0415
+        from bot.apis.api_bitpreco import Ticker  # noqa: PLC0415
     except ImportError:
-        from crypto.api_bitpreco import Ticker  # noqa: PLC0415
+        from bot.apis.api_bitpreco import Ticker  # noqa: PLC0415
 
     response = Ticker().json()
+    # excluindo a linha 'success': True, pois não é um mercado
+    response.pop('success', None)
     markets = sorted(response.keys())
     options = []
     for market in markets:
@@ -36,22 +34,44 @@ def coinpair_options():
     return options
 
 
-def get_coinpair():
+def get_str_coinpair() -> str:
     try:
-        # Consulta SQL para extrair o coinpair do arquivo JSON
         query = f"SELECT coinpair FROM '{COINPAIR_FILE}'"
         result = duckdb.query(query).fetchone()
-        if result and result[0]:
-            return result[0]
-        else:
-            return DEFAULT_COINPAIR
+        return result[0] if result and result[0] else DEFAULT_COINPAIR
     except Exception as e:
         print(f'Erro ao ler {COINPAIR_FILE} com DuckDB: {e}')
         return DEFAULT_COINPAIR
 
 
+def get_coinpair() -> CoinPair:
+    try:
+        query = f"SELECT coinpair FROM '{COINPAIR_FILE}'"
+        result = duckdb.query(query).fetchone()
+        coinpair_str = result[0] if result and result[0] else DEFAULT_COINPAIR
+
+        # Converter string para CoinPair
+        base, quote = coinpair_str.split('-')
+        return CoinPair(base=base, quote=quote, exchange=ExchangeType.BITPRECO)
+    except Exception as e:
+        print(f'Erro ao ler {COINPAIR_FILE} com DuckDB: {e}')
+        base, quote = DEFAULT_COINPAIR.split('-')
+        return CoinPair(base=base, quote=quote, exchange=ExchangeType.BITPRECO)
+
+
 def set_coinpair(coinpair):
     try:
+        # Verificar se o coinpair está nas opções disponíveis
+        options = coinpair_options()
+        valid_pairs = [opt['value'] for opt in options]
+
+        if coinpair not in valid_pairs:
+            print(
+                f'Par de moedas inválido: {coinpair}.'
+                + f' Opções válidas: {valid_pairs}'
+            )
+            return False
+
         data = {'coinpair': coinpair}
         with open(COINPAIR_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2)

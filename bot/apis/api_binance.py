@@ -1,13 +1,24 @@
 import time
 from datetime import datetime
+from decimal import Decimal
 
 import pandas as pd
 import requests
 
+from bot.models.models import BinanceKlines, KlineData
+
 try:
     from segredos import CAMINHO
 except ImportError:
-    from crypto.segredos import CAMINHO
+    import os
+    import sys
+
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    sys.path.append(project_root)
+    from segredos import CAMINHO
+
 
 BASE_URLS = [
     'https://api.binance.com',
@@ -47,53 +58,34 @@ def get_klines(
 
     if response.status_code == STATUS_CODE:
         response = response.json()
-        df = pd.DataFrame(
-            response,
-            columns=[
-                'Kline open time',
-                'Open price',
-                'High price',
-                'Low price',
-                'Close price',
-                'Volume',
-                'Kline Close time',
-                'Quote asset volume',
-                'Number of trades',
-                'Taker buy base asset volume',
-                'Taker buy quote asset volume',
-                'Unused field, ignore',
-            ],
+        # Converter os dados brutos para objetos KlineData
+        klines_data = []
+        for kline in response:
+            kline_dict = {
+                'timestamp': datetime.fromtimestamp(
+                    kline[0] / 1000
+                ).astimezone(),
+                'open': Decimal(str(kline[1])),
+                'high': Decimal(str(kline[2])),
+                'low': Decimal(str(kline[3])),
+                'close': Decimal(str(kline[4])),
+                'volume': Decimal(str(kline[5])),
+                'kline_close_time': datetime.fromtimestamp(
+                    kline[6] / 1000
+                ).astimezone(),
+                'quote_asset_volume': Decimal(str(kline[7])),
+                'number_of_trades': int(kline[8]),
+                'taker_buy_base_volume': Decimal(str(kline[9])),
+                'taker_buy_quote_volume': Decimal(str(kline[10])),
+            }
+            klines_data.append(KlineData(**kline_dict))
+
+        binance_klines = BinanceKlines(
+            data=klines_data, symbol=symbol, interval=interval
         )
-        df = df.drop(columns=['Unused field, ignore'])
-        # transform timestamp Kline open time and Kline close time to datetime
-        df['Kline open time'] = pd.to_datetime(
-            df['Kline open time'],
-            unit='ms',
-        )
-        df['Kline Close time'] = pd.to_datetime(
-            df['Kline Close time'], unit='ms'
-        )
-        df['Kline open time'] = (
-            df['Kline open time']
-            .dt.tz_localize('UTC')
-            .dt.tz_convert('America/Sao_Paulo')
-        )
-        df['Kline Close time'] = (
-            df['Kline Close time']
-            .dt.tz_localize('UTC')
-            .dt.tz_convert('America/Sao_Paulo')
-        )
-        numeric_columns = [
-            'Open price',
-            'High price',
-            'Low price',
-            'Close price',
-            'Volume',
-            'Quote asset volume',
-            'Taker buy base asset volume',
-            'Taker buy quote asset volume',
-        ]
-        df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric)
+
+        # Converter para DataFrame
+        df = pd.DataFrame([k.model_dump() for k in binance_klines.data])
         return df
     else:
         resposta = response.raise_for_status()

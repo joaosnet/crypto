@@ -4,10 +4,10 @@ from dotenv import load_dotenv
 
 # pegando o caminho da pasta atual
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# print(BASE_DIR)
 
-CAMINHO = BASE_DIR + '/db'
 
+CAMINHO = os.path.join(BASE_DIR, 'db')
+# print(CAMINHO)
 load_dotenv()
 
 DEGUG = os.getenv('DEBUG')

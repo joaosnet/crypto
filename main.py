@@ -2,7 +2,7 @@ import webbrowser
 from threading import Timer
 
 from crypto import app, server  # noqa: F401
-from crypto.segredos import DEGUG
+from segredos import DEGUG
 
 
 # Função para abrir o navegador automaticamente

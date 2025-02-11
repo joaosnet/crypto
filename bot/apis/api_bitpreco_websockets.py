@@ -1,6 +1,6 @@
 import phxsocket
 
-from crypto.segredos import auth_token
+from segredos import auth_token
 
 # Endpoints WebSocket da Bitypreço
 ORDERBOOK_SOCKET_URL = (

@@ -160,7 +160,7 @@ cython_debug/
 #.idea/
 .vscode/
 .ruff_cache/
-crypto/db/*.csv
+db/*.csv
 
 crypto/db/trade_history.json
 crypto/db/*.parquet
