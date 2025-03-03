@@ -1,7 +1,7 @@
 import webbrowser
 from threading import Timer
 
-from crypto import app, server  # noqa: F401
+from dashboard import app, server  # noqa: F401
 from segredos import DEGUG
 
 

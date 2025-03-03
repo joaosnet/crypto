@@ -6,11 +6,13 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import Input, Output, State, dcc, html
 from dash_iconify import DashIconify
+from plotly import express as px
 from plotly.subplots import make_subplots
 from rich.console import Console
 
 from bot.apis.api_binance import get_klines
-from crypto import app
+from dashboard import app
+from dashboard.custom_chart_editor import ChartEditor
 from db.duckdb_csv import load_csv_in_dataframe
 from segredos import CAMINHO
 
@@ -54,6 +56,16 @@ div_graph_preco = html.Div(
                                 id='ordens-icon', icon='mdi:cart-outline'
                             ),
                         ),
+                        dmc.TabsTab(
+                            'editor',
+                            value='editor',
+                            leftSection=DashIconify(
+                                id='editor-icon', icon='mdi:chart-line'
+                            ),
+                            rightSection=DashIconify(
+                                id='editor-icon', icon='mdi:chart-line'
+                            ),
+                        ),
                     ],
                 ),
                 # tabs panel below
@@ -82,6 +94,26 @@ div_graph_preco = html.Div(
                     ),
                     value='Ordens de Compra',
                     id='tab-ordens',
+                ),
+                dmc.TabsPanel(
+                    dmc.ScrollArea(
+                        h=250,
+                        w=250,
+                        id='tab-editor',
+                        children=[
+                            dmc.Stack(
+                                gap=0,
+                                children=[
+                                    dmc.Skeleton(h=50, mb='xl'),
+                                    dmc.Skeleton(h=8, radius='xl'),
+                                    dmc.Skeleton(h=8, my=6),
+                                    dmc.Skeleton(h=8, w='70%', radius='xl'),
+                                ],
+                            ),
+                        ],
+                    ),
+                    value='editor',
+                    # id='tab-editor',
                 ),
             ],
         ),
@@ -252,10 +284,9 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                 end_date=now,
             )
             if df_bity.empty is False:
-                df_bity['timestamp'] = (
-                    pd.to_datetime(df_bity['timestamp'])
-                    .dt.tz_convert('America/Sao_Paulo')
-                )
+                df_bity['timestamp'] = pd.to_datetime(
+                    df_bity['timestamp']
+                ).dt.tz_convert('America/Sao_Paulo')
                 # df_bity = df_bity[
                 #     (df_bity['timestamp'] >= minutes_ago)
                 #     & (df_bity['timestamp'] <= now)
@@ -570,3 +601,67 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
             data=[go.Scatter(x=[0], y=[0], text=resultado, mode='text')],
             layout=go.Layout(title='Erro na atualização do gráfico'),
         )
+
+
+# Callback para adicionar o editor de gráficos ao tab Preços
+@app.callback(
+    Output('tab-editor', 'children'),
+    Input('tabs', 'value'),
+    State('data-recency', 'value'),
+    prevent_initial_call=True,
+)
+def editor_grafico(value, data_recency):
+    if value == 'editor':
+        try:
+            # Configurar período de tempo
+            now = datetime.datetime.now()
+            data_recency = float(data_recency or 3)
+            minutes_ago = now - datetime.timedelta(minutes=data_recency)
+
+            # Converter para timezone correta
+            minutes_ago = pd.to_datetime(minutes_ago)
+            now = pd.to_datetime(now)
+
+            # Carregar dados
+            df_bity = load_csv_in_dataframe(
+                CAMINHO + '/BTC_BRL_bitpreco.csv',
+                start_date=minutes_ago,
+                end_date=now,
+            )
+
+            if df_bity.empty:
+                return dmc.Alert(
+                    'Não há dados disponíveis para o período selecionado',
+                    color='red',
+                )
+
+            # Criar figura padrão
+            df = px.data.iris()
+            default_fig = px.scatter(
+                df, x='sepal_length', y='sepal_width', color='species'
+            )
+
+            # Inicializar editor
+            editor = ChartEditor(
+                app=app,
+                data_source=df_bity.to_dict('list'),
+                default_figure=default_fig,
+                figure_title='BTC-BRL Chart',
+                container_id='chart-editor-container',
+                modal_size='85%',
+                card_size=600,  # Aumentar tamanho do card
+            )
+
+            return editor.get_layout()
+
+        except Exception as e:
+            console.print_exception(show_locals=True)
+            return dmc.Alert(
+                f'Erro ao carregar o editor: {str(e)}',
+                color='red',
+            )
+
+    return dmc.Skeleton(
+        height=400,
+        width='100%',
+    )

@@ -156,9 +156,55 @@ def fetch_bitpreco_history(
     return None
 
 
+class ProgressManager:
+    def __init__(self, existing_progress=None, task_id=None):
+        self.existing_progress = existing_progress
+        self.task_id = task_id
+        self.progress = None
+
+    def __enter__(self):
+        if not self.existing_progress:
+            self.progress = Progress(
+                SpinnerColumn(),
+                TextColumn('[progress.description]{task.description}'),
+                BarColumn(),
+                TimeRemainingColumn(),
+                console=console,
+            )
+            self.progress.start()
+            self.task_id = self.progress.add_task('Iniciando...', total=100)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.progress:
+            self.progress.stop()
+
+    def update(self, advance=None, total=None, description=None):
+        if self.existing_progress:
+            if advance:
+                self.existing_progress.update(self.task_id, advance=advance)
+            if description:
+                self.existing_progress.update(
+                    self.task_id, description=description
+                )
+            if total:
+                self.existing_progress.update(self.task_id, total=total)
+        elif self.progress:
+            if advance:
+                self.progress.update(self.task_id, advance=advance)
+            if description:
+                self.progress.update(self.task_id, description=description)
+            if total:
+                self.progress.update(self.task_id, total=total)
+
+
 # função que gera um dataset com os dados de histórico de preços da BitPreço
 def dataset_bitpreco(
-    coin_pair: CoinPair, resolution: str = '1', salvar_csv: bool = False
+    coin_pair: CoinPair,
+    resolution: str = '1',
+    salvar_csv: bool = False,
+    existing_progress=None,
+    task_id=None,
 ) -> pd.DataFrame:
     # Set the starting timestamp (e.g., September 1, 2017)
     start_time = int(datetime(2017, 9, 1).timestamp())
@@ -172,23 +218,15 @@ def dataset_bitpreco(
     # Calcular o número total de iterações
     total_iterations = (end_time - start_time) // interval + 1
 
-    # Configurar a barra de progresso customizada
-    progress = Progress(
-        SpinnerColumn(),
-        TextColumn('[progress.description]{task.description}'),
-        BarColumn(),
-        TextColumn('[progress.percentage]{task.percentage:>3.0f}%'),
-        TimeRemainingColumn(),
-    )
-
-    with progress:
-        # Adicionar a tarefa principal
-        task = progress.add_task(
-            f'[cyan]Coletando dados históricos ({symbol})',
+    with ProgressManager(existing_progress, task_id) as progress_mgr:
+        progress_mgr.update(
             total=total_iterations,
+            description=f'Coletando dados históricos ({symbol})',
         )
 
         current_time = start_time
+        iteration = 0
+
         while current_time < end_time:
             try:
                 next_time = min(current_time + interval, end_time)
@@ -199,17 +237,25 @@ def dataset_bitpreco(
                     countback=0,
                     currency_code='BRL',
                 )
+
                 if df is not None:
                     data_frames.append(df)
+
                 current_time = next_time
-                progress.advance(task)  # Avança a barra de progresso
-                time.sleep(1)  # Respect API rate limits
+                iteration += 1
+                progress_mgr.update(
+                    advance=1,
+                    description='Processando período'
+                    + f' {iteration}/{total_iterations}',
+                )
+                time.sleep(1)  # API rate limit
+
             except Exception as e:
-                progress.console.print(
-                    f'[red]Error at timestamp {current_time}: {e}[/red]'
+                console.print(
+                    f'[red]Erro no timestamp {current_time}: {e}[/red]'
                 )
                 current_time += interval
-                progress.advance(task)  # Avança mesmo em caso de erro
+                iteration += 1
                 continue
 
     # Combine all data frames into one

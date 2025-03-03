@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import dash_table, dcc
 
-from crypto import dash_utils
+from dashboard import dash_utils
 
 
 def create_table(df=None, id='table'):

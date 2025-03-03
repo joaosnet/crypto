@@ -25,4 +25,4 @@ server.config.update(
 )
 
 
-from crypto import callbacks, graph_preco_tab, views  # noqa: E402, F401
+from dashboard import callbacks, graph_preco_tab, views  # noqa: E402, F401

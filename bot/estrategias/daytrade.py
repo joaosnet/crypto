@@ -1,3 +1,6 @@
+from db.duckdb_csv import save_to_csv_duckdb
+from segredos import CAMINHO
+
 from ..analizador_de_mercado import analyze_market
 from ..indicadores.calcular_indicadores import calculate_indicators
 from ..indicadores.gerar_sinais_compra_venda import generate_signals
@@ -42,7 +45,7 @@ def execute_trade(  # noqa: PLR0913, PLR0917
         )
 
         # Modificar esta linha para usar coin_pair diretamente
-        df = get_price_history(coin_pair=coin_pair)
+        df = get_price_history(progress, task, coin_pair=coin_pair)
         progress.update(
             task,
             description='Histórico de preços carregado',
@@ -73,13 +76,14 @@ def execute_trade(  # noqa: PLR0913, PLR0917
         )
 
         risk_per_trade = adjust_risk(risk_factor)
-        last_signal = df['position'].iloc[-1]
+        last_positon = df['position'].iloc[-1]
+        last_signal = df['signal'].iloc[-1]
         last_price = ticker_json['last']
 
         brl_balance = balance.get('BRL', 0)
         btc_balance = balance.get('BTC', 0)
         # last_signal = -1
-        if last_signal == SIGNAL_BUY and brl_balance > 0:
+        if brl_balance > 0 and last_positon == 0 and last_signal == SIGNAL_BUY:
             execute_buy(
                 executed_orders,
                 brl_balance,
@@ -87,7 +91,12 @@ def execute_trade(  # noqa: PLR0913, PLR0917
                 last_price,
                 coin_pair,
             )
-        elif last_signal == SIGNAL_SELL and btc_balance > 0:
+            df.iloc[-1, df.columns.get_loc('position')] = SIGNAL_BUY
+        elif (
+            btc_balance > 0
+            and last_positon == SIGNAL_BUY
+            and last_signal == SIGNAL_SELL
+        ):
             execute_sell(
                 executed_orders,
                 coin_pair,
@@ -95,11 +104,24 @@ def execute_trade(  # noqa: PLR0913, PLR0917
                 risk_per_trade,
                 last_price,
             )
+            df.iloc[-1, df.columns.get_loc('position')] = 0
         else:
             console.print(
                 ':hourglass: [bold yellow]Nenhuma ação necessária '
                 + 'no momento.[/bold yellow]'
             )
+        # Validar sinais
+        assert df['position'].isin([SIGNAL_BUY, 0, SIGNAL_SELL]).all(), (
+            'Valores de posição inválidos'
+        )
+        # Salvar usando função modificada que preserva timezone
+        save_to_csv_duckdb(
+            df,
+            CAMINHO
+            + f'/{coin_pair.bitpreco_websocket}_{coin_pair.exchange.value}'
+            + '.csv',
+            mode='append',
+        )
 
     except Exception as e:
         console.print(f'Erro na execução do trade: {str(e)}')
@@ -126,7 +148,7 @@ def execute_buy(
     #     volume=amount,
     #     amount=amount,
     #     limited=True,
-    #     market=coin_pair.get_format(),
+    #     market=coin_pair.bitpreco_format,
     # )
     resposta_compra = 'success'
     console.print(
@@ -183,7 +205,7 @@ def execute_sell_trade(coin_pair: CoinPair, amount, price, trade_type):
     #     volume=amount,
     #     amount=amount,
     #     limited=True,
-    #     market=coin_pair.get_format(),
+    #     market=coin_pair.bitpreco_format,
     # )
     resposta_venda = 'success'
     console.print(

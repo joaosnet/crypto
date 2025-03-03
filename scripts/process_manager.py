@@ -15,9 +15,9 @@ def get_script_path(script_name: str) -> str:
 def is_script_running(script_name: str) -> bool:
     """Verifica se um script Python específico está em execução."""
     current_pid = os.getpid()
-    script_path = get_script_path(script_name)
-    print(f'[blue]Procurando por:[/blue] {script_path}')
-    print(f'[blue]PID atual:[/blue] {current_pid}')
+    # script_path = get_script_path(script_name)
+    # print(f'[blue]Procurando por:[/blue] {script_path}')
+    # print(f'[blue]PID atual:[/blue] {current_pid}')
 
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
@@ -42,10 +42,10 @@ def is_script_running(script_name: str) -> bool:
                 ):
                     continue
 
-                print('[yellow]Processo Python encontrado:[/yellow]')
-                print(f'  PID: {proc.info["pid"]}')
-                print(f'  Nome: {proc.info["name"]}')
-                print(f'  Comando: {" ".join(cmdline)}')
+                # print('[yellow]Processo Python encontrado:[/yellow]')
+                # print(f'  PID: {proc.info["pid"]}')
+                # print(f'  Nome: {proc.info["name"]}')
+                # print(f'  Comando: {" ".join(cmdline)}')
 
                 # Verifica se o último argumento
                 # é exatamente o script que procuramos

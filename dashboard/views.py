@@ -13,11 +13,11 @@ from compartilhado import (
     get_interval,
     get_str_coinpair,
 )
-from crypto import app
-from crypto.componentes_personalizados import (
+from dashboard import app
+from dashboard.componentes_personalizados import (
     bar_precos_atuais,
 )
-from crypto.graph_preco_tab import div_graph_preco
+from dashboard.graph_preco_tab import div_graph_preco
 
 # from crypto.timescaledb import read_from_db
 

@@ -472,6 +472,9 @@ dependencies = [
     { name = "antlr4-python3-runtime" },
     { name = "array-to-latex" },
     { name = "dash", extra = ["celery", "diskcache"] },
+    { name = "dash-bootstrap-components" },
+    { name = "dash-bootstrap-templates" },
+    { name = "dash-chart-editor" },
     { name = "dash-dangerously-set-inner-html" },
     { name = "dash-iconify" },
     { name = "dash-mantine-components" },
@@ -483,6 +486,7 @@ dependencies = [
     { name = "multiprocess" },
     { name = "pandas" },
     { name = "phxsocket" },
+    { name = "plotly" },
     { name = "psutil" },
     { name = "psycopg2-binary" },
     { name = "pyarrow" },
@@ -510,6 +514,9 @@ requires-dist = [
     { name = "antlr4-python3-runtime", specifier = "==4.11" },
     { name = "array-to-latex", specifier = ">=0.92" },
     { name = "dash", extras = ["celery", "diskcache"], specifier = ">=2.18.2" },
+    { name = "dash-bootstrap-components", specifier = ">=1.7.1" },
+    { name = "dash-bootstrap-templates", specifier = ">=1.3.0" },
+    { name = "dash-chart-editor", specifier = ">=0.0.1a5" },
     { name = "dash-dangerously-set-inner-html", specifier = ">=0.0.2" },
     { name = "dash-iconify", specifier = ">=0.1.2" },
     { name = "dash-mantine-components", specifier = "==0.15.1" },
@@ -521,6 +528,7 @@ requires-dist = [
     { name = "multiprocess", specifier = ">=0.70.17" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "phxsocket", specifier = ">=0.1.5" },
+    { name = "plotly", specifier = "==5.24.1" },
     { name = "psutil", specifier = ">=5.9.8" },
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "pyarrow", specifier = ">=18.1.0" },
@@ -575,6 +583,41 @@ diskcache = [
     { name = "diskcache" },
     { name = "multiprocess" },
     { name = "psutil" },
+]
+
+[[package]]
+name = "dash-bootstrap-components"
+version = "1.7.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dash" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/68/fa/f702d729a4b788293b796dc92f3d529909641de1e2e13f967211169b807a/dash_bootstrap_components-1.7.1.tar.gz", hash = "sha256:30d48340d6dc89831d6c06e400cd4236f0d5363562c05b2a922f21545695a082", size = 136579 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c3/87/4db3b56e9a6813d413a0f20e053aa163d652babb629a8bf7b871af4a075f/dash_bootstrap_components-1.7.1-py3-none-any.whl", hash = "sha256:5e8eae7ee1d013f69e272c68c1015b53ab71802460152088f33fffa90d245199", size = 229294 },
+]
+
+[[package]]
+name = "dash-bootstrap-templates"
+version = "1.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dash" },
+    { name = "dash-bootstrap-components" },
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5f/f2/ee03376b6fa8a52e2448b50c80ca45931a30f2025790771dc8d7457f7eed/dash_bootstrap_templates-1.3.0.tar.gz", hash = "sha256:a704e71b45bb9443e6ba7851ceef33d220b6decac5c344fff41b52d928470877", size = 111429 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/53/d6/1ab1d10125d92fbd0c7d3362718e7fc1dc7e6ff7ab5dcdbfb105f5d2e299/dash_bootstrap_templates-1.3.0-py3-none-any.whl", hash = "sha256:bb49a57d4a4331d0e610c87fcfb3fcbab4d015b5361f2fa58dce0bf1213ffc7c", size = 97240 },
+]
+
+[[package]]
+name = "dash-chart-editor"
+version = "0.0.1a5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f9/e4/8abaf7b175bb147f98ff29846923a8c203a852d253e41a8d21dee28995c0/dash_chart_editor-0.0.1a5.tar.gz", hash = "sha256:0f9db19afa8212e89443350f3f623f0d4d7caef7d417ae564d6336fad2ec101d", size = 2193166 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bf/84/e84f96f26a79be0d0accc8c2b62aee6183205c11252882b3180f7141d5e3/dash_chart_editor-0.0.1a5-py3-none-any.whl", hash = "sha256:cad60e37541a185fb135f0ea848bfc3a7547c54388d82d386670842646948d24", size = 2214042 },
 ]
 
 [[package]]

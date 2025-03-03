@@ -16,11 +16,11 @@ from compartilhado import (
     get_coinpair,
     set_coinpair,
 )
-from crypto import app, dash_utils
-from crypto.componentes_personalizados import (
+from dashboard import app, dash_utils
+from dashboard.componentes_personalizados import (
     bar_precos_atuais,
 )
-from crypto.views import layout_dashboard
+from dashboard.views import layout_dashboard
 from db.duckdb_csv import load_csv_in_records
 
 # from crypto.timescaledb import read_from_db

@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 
 from bot.parametros import (
+    CONDICOES_COMPRA,
+    CONDICOES_VENDA,
     RSI_OVERBOUGHT,
     RSI_OVERSOLD,
     SIGNAL_BUY,
@@ -9,8 +11,6 @@ from bot.parametros import (
     STOCH_OVERBOUGHT,
     STOCH_OVERSOLD,
 )
-from db.duckdb_csv import save_to_csv_duckdb
-from segredos import CAMINHO
 
 
 def generate_signals(df, symbol: str = 'BTC_BRL'):
@@ -93,7 +93,9 @@ def generate_signals(df, symbol: str = 'BTC_BRL'):
 
     # Sinais de compra - agora precisa atender apenas 3 das 5 condições
     buy_signals = pd.DataFrame({
+        # ema nao esta servindo de nada
         'ema_signal': (df['ema_cross'] == 1),
+        # macd nao esta senvindo de nada
         'macd_signal': (df['macd_cross'] == 1),
         'rsi_signal': (df['rsi'] < RSI_OVERSOLD),
         'bb_signal': (df['close'] <= df['bb_lower']),
@@ -114,18 +116,17 @@ def generate_signals(df, symbol: str = 'BTC_BRL'):
     sell_count = sell_signals.sum(axis=1)
 
     # Gera sinais quando pelo menos 3 condições são atendidas
-    CONDICOES_COMPRA = 3
-    CONDICOES_VENDA = 3
     df.loc[buy_count >= CONDICOES_COMPRA, 'signal'] = SIGNAL_BUY
     df.loc[sell_count >= CONDICOES_VENDA, 'signal'] = SIGNAL_SELL
 
     # Calcular posições
-    df['position'] = df['signal'].fillna(0)
+    # df['position'] = df['signal'].fillna(0)
+    df['position'] = 0
 
     # Validar sinais
-    assert df['position'].isin([SIGNAL_BUY, 0, SIGNAL_SELL]).all(), (
-        'Valores de posição inválidos'
-    )
+    # assert df['position'].isin([SIGNAL_BUY, 0, SIGNAL_SELL]).all(), (
+    #     'Valores de posição inválidos'
+    # )
 
     # Garantir tipos corretos antes de salvar - versão melhorada
     for col in integer_columns:
@@ -141,14 +142,8 @@ def generate_signals(df, symbol: str = 'BTC_BRL'):
     df['trend'] = df['trend'].fillna('neutral').astype(str)
 
     # Garantir timezone UTC antes de salvar
-    if df['timestamp'].dt.tz is None:
-        df['timestamp'] = df['timestamp'].dt.tz_localize('UTC')
-    df['timestamp'] = df['timestamp'].dt.tz_convert('UTC')
-
-    # Salvar usando função modificada que preserva timezone
-    save_to_csv_duckdb(
-        df,
-        CAMINHO + f'/{symbol}_bitpreco.csv',
-    )
+    # if df['timestamp'].dt.tz is None:
+    #     df['timestamp'] = df['timestamp'].dt.tz_localize('UTC')
+    # df['timestamp'] = df['timestamp'].dt.tz_convert('UTC')
 
     return df

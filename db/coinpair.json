@@ -1,3 +1,7 @@
 {
-  "coinpair": "BTC-BRL"
+  "coinpair": [
+    "USDT-BRL",
+    "BTC-BRL",
+    "USDC-BRL"
+  ]
 }

@@ -37,7 +37,8 @@ def kill_process(script_name: str) -> bool:
                     continue
 
                 print(
-                    f'[yellow]Verificando processo:[/yellow] PID {proc.info["pid"]}'
+                    '[yellow]Verificando processo:[/yellow]'
+                    + f' PID {proc.info["pid"]}'
                 )
                 print(f'  Comando: {" ".join(cmdline)}')
 
@@ -47,7 +48,8 @@ def kill_process(script_name: str) -> bool:
                     and os.path.basename(cmdline[-1]) == script_name
                 ):
                     print(
-                        f'[red]Encerrando processo[/red] PID {proc.info["pid"]}'
+                        '[red]Encerrando processo[/red]'
+                        + f' PID {proc.info["pid"]}'
                     )
                     proc.kill()
                     found = True
@@ -68,14 +70,16 @@ def kill_process(script_name: str) -> bool:
         )
     else:
         print(
-            f'[green]Processo(s) do {script_name} encerrado(s) com sucesso![/green]'
+            f'[green]Processo(s) do {script_name}'
+            + ' encerrado(s) com sucesso![/green]'
         )
 
     return found
 
 
 def main():
-    if len(sys.argv) != 2:
+    tamanho_argumentos = 2
+    if len(sys.argv) != tamanho_argumentos:
         print('[red]Uso: python kill_process.py <script_name>[/red]')
         sys.exit(1)
 

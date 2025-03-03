@@ -1,6 +1,8 @@
 import duckdb as db
 import pandas as pd
 
+from bot.logs.config_log import console
+
 
 # Função para carregar os dados do CSV com e sem filtro de data
 def load_csv_in_dataframe(
@@ -85,12 +87,12 @@ def save_to_csv_duckdb(df: pd.DataFrame, filepath: str, mode='overwrite'):
                 SELECT DISTINCT * FROM current_data
                 UNION ALL
                 SELECT * FROM temp_df
-                WHERE timestamp NOT IN (SELECT timestamp FROM current_data)
+                WHERE timestamp NOT IN (SELECT strftime('%Y-%m-%d %H:%M:%S%z', timestamp) FROM current_data)
             ) t
             ORDER BY timestamp;
 
             COPY (SELECT * FROM merged) TO '{filepath}' (HEADER true);
-            """
+            """  # noqa: E501
         else:
             # Em caso de overwrite, simplesmente salvar
             query = (
@@ -100,8 +102,14 @@ def save_to_csv_duckdb(df: pd.DataFrame, filepath: str, mode='overwrite'):
         con.execute(query)
         return True
     except Exception as e:
-        print(f'Erro ao salvar dados: {e}')
-        return False
+        if 'Binder Error' in str(e):
+            # entao salva no modo overwrite
+            con.execute(
+                f"COPY (SELECT * FROM temp_df) TO '{filepath}' (HEADER true)"
+            )
+        else:
+            console.print(f'Erro ao salvar dados com duckdb: {e}')
+            return False
     finally:
         con.close()
 
@@ -110,16 +118,14 @@ if __name__ == '__main__':
     import datetime as dt
     from datetime import datetime, timedelta
 
-    from rich import print
-
     end_date = datetime.now(dt.timezone.utc)
     start_date = end_date - timedelta(days=30)  # último dia
     # Testando a função load_csv_in_dataframe
     df = 'crypto/db/BTC_BRL_bitpreco.csv'
-    print(load_csv_in_dataframe(df))
+    console.print(load_csv_in_dataframe(df))
 
     # Testando a função load_csv_in_records
-    # print(
+    # console.print(
     #     load_csv_in_records(
     #         df,
     #         start_date=start_date.isoformat(),
@@ -130,4 +136,4 @@ if __name__ == '__main__':
     df_period = load_csv_in_dataframe(
         df=df, start_date=start_date.isoformat(), end_date=end_date.isoformat()
     )
-    print(df_period)
+    console.print(df_period)

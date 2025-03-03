@@ -38,3 +38,13 @@ RSI_OVERBOUGHT = 70
 RSI_OVERSOLD = 30  # Limite inferior do RSI para compra
 STOCH_OVERBOUGHT = 80
 STOCH_OVERSOLD = 20
+
+# Quantidade de condicoes de compra e venda
+CONDICOES_COMPRA = 3
+CONDICOES_VENDA = 3
+
+# Parametros de Tentativas caso a internet caia
+NUMERO_MAXIMO_TENTATIVAS = 3
+INTERVALO_TENTATIVAS = 5
+
+THREAD_LOCK = False
