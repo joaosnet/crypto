@@ -69,6 +69,8 @@ def execute_trade(  # noqa: PLR0913, PLR0917
         )
 
         trend, risk_factor = analyze_market(df)
+        # Limpar o console antes do próximo print
+        console.clear()
         console.print(
             ':chart_with_upwards_trend: [bold cyan]'
             + f'Tendência atual:[/bold cyan] {trend}, '
