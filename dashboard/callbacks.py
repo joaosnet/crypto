@@ -6,15 +6,24 @@ import dash_mantine_components as dmc
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
-from dash import ALL, Input, Output, Patch, State, callback, dcc, html
+from dash import (
+    ALL,
+    Input,
+    Output,
+    Patch,
+    State,
+    callback,
+    dcc,
+    html,
+    no_update,
+)
 from dash import callback_context as ctx
-from dash.exceptions import PreventUpdate
-from mitosheet.mito_dash.v1 import Spreadsheet, mito_callback
+from dash_iconify import DashIconify
 
 from bot.apis.api_bitpreco import Buy, Sell
 from compartilhado import (
-    get_coinpair,
-    set_coinpair,
+    get_str_coinpairs,
+    set_coinpairs,
 )
 from dashboard import app, dash_utils
 from dashboard.componentes_personalizados import (
@@ -122,11 +131,11 @@ def update_coinpair(filtro, compra, venda):
     elif trigger == 'market-venda':
         novo_valor = venda
     else:
-        novo_valor = get_coinpair()
+        novo_valor = get_str_coinpairs()
 
     # Atualiza o valor no arquivo de configuração
-    if novo_valor is not None:
-        set_coinpair(novo_valor)
+    if novo_valor is not None and len(novo_valor) > 0:
+        set_coinpairs(novo_valor)
 
     # Retorna o mesmo valor para todos os campos
     return novo_valor, novo_valor, novo_valor
@@ -179,139 +188,292 @@ def preco_atuais(
     )
 
 
+# Função utilitária para criar tabelas dmc padronizadas com paginação, ordenação e ocultação de colunas  # noqa: E501
+def criar_tabela_dmc(  # noqa: PLR0913, PLR0917
+    df,
+    caption='Tabela de dados',
+    table_id=None,
+    striped=True,
+    highlight_hover=True,
+    with_border=True,
+    with_column_borders=True,
+    vertical_spacing='xs',
+    horizontal_spacing='md',
+    # Parâmetros de paginação
+    with_pagination=False,
+    rows_per_page=10,
+    pagination_size='sm',
+    # Parâmetros de ordenação
+    sortable=False,
+    # Parâmetros de ocultação de colunas
+    hidden_columns=None,
+):
+    """
+    Cria uma tabela dmc padronizada a partir de um DataFrame com opções de paginação,
+    ordenação e ocultação de colunas.
+    """  # noqa: E501
+    # Gerar IDs únicos se não fornecidos
+    if table_id is None:
+        import uuid  # noqa: PLC0415
+
+        table_id = f'table-{str(uuid.uuid4())[:8]}'
+
+    # Ocultar colunas se especificado
+    if hidden_columns:
+        df = df.drop(
+            columns=[col for col in hidden_columns if col in df.columns]
+        )
+
+    # Preparar os dados para dmc.Table
+    head = df.columns.tolist()
+
+    # Implementação da paginação
+    if with_pagination:
+        total_rows = len(df)
+        total_pages = max(1, (total_rows + rows_per_page - 1) // rows_per_page)
+
+        # IDs específicos para os componentes de paginação
+        pagination_id = f'{table_id}-pagination'
+        pagination_info_id = f'{table_id}-pagination-info'
+        data_store_id = f'{table_id}-data-store'
+
+        # Mostrar apenas a primeira página inicialmente
+        body = df.iloc[:rows_per_page].values.tolist() if not df.empty else []
+
+        # Store para os dados completos e estado da paginação
+        store_component = dcc.Store(
+            id=data_store_id,
+            data={
+                'data': df.to_dict('records'),
+                'current_page': 1,
+                'rows_per_page': rows_per_page,
+                'total_rows': total_rows,
+            },
+        )
+
+        # Componente de paginação
+        pagination_component = dmc.Group(
+            justify='space-between',
+            align='center',
+            mt='md',
+            mb='md',
+            children=[
+                dmc.Text(
+                    id=pagination_info_id,
+                    size='sm',
+                    children=f'Mostrando 1-{min(rows_per_page, total_rows)} de {total_rows}',  # noqa: E501
+                ),
+                dmc.Pagination(
+                    id=pagination_id,
+                    total=total_pages,
+                    value=1,
+                    size=pagination_size,
+                    withEdges=True,
+                    siblings=1,
+                    boundaries=1,
+                ),
+            ],
+        )
+
+        # Registrar callback para essa tabela específica
+        @app.callback(
+            [Output(table_id, 'data'), Output(pagination_info_id, 'children')],
+            [Input(pagination_id, 'value')],
+            [State(data_store_id, 'data')],
+        )
+        def update_table_page(page, stored_data):
+            if not page or not stored_data:
+                return no_update, no_update
+
+            df_records = stored_data['data']
+            rows_per_page = stored_data['rows_per_page']
+            total_rows = stored_data['total_rows']
+
+            # Calcular índices para a página atual
+            start_idx = (page - 1) * rows_per_page
+            end_idx = min(start_idx + rows_per_page, total_rows)
+
+            # Criar DataFrame temporário para selecionar a página
+            df_temp = pd.DataFrame(df_records)
+
+            # Dados para a página atual
+            page_data = {
+                'head': head,
+                'body': df_temp.iloc[start_idx:end_idx].values.tolist()
+                if not df_temp.empty
+                else [],
+                'caption': caption,
+            }
+
+            # Atualizar informações de paginação
+            info_text = f'Mostrando {start_idx + 1}-{end_idx} de {total_rows}'
+
+            return page_data, info_text
+
+    else:
+        body = df.values.tolist()
+        pagination_component = None
+        store_component = None
+
+    # Adicionar ícones para ordenação das colunas se sortable=True
+    if sortable:
+        head_with_sort = []
+        for col in head:
+            head_with_sort.append(
+                html.Div(
+                    [
+                        html.Span(col),
+                        html.Span(
+                            DashIconify(icon='mdi:sort', width=16),
+                            style={'marginLeft': '5px', 'cursor': 'pointer'},
+                            id={
+                                'type': 'sort-icon',
+                                'column': col,
+                                'table': table_id,
+                            },
+                        ),
+                    ],
+                    style={'display': 'flex', 'alignItems': 'center'},
+                )
+            )
+        head = head_with_sort
+
+    # Criar a tabela com estilização aprimorada
+    table = dmc.Table(
+        data={
+            'head': head,
+            'body': body,
+            'caption': caption,
+        },
+        striped=striped,
+        highlightOnHover=highlight_hover,
+        withTableBorder=with_border,
+        withColumnBorders=with_column_borders,
+        verticalSpacing=vertical_spacing,
+        horizontalSpacing=horizontal_spacing,
+        id=table_id,
+    )
+
+    # Montar componentes finais em um container responsivo
+    components = []
+
+    if store_component:
+        components.append(store_component)
+
+    # Container com scroll horizontal para tabelas grandes
+    table_container = html.Div(
+        table,
+        style={
+            'overflowX': 'auto',
+            'width': '100%',
+            'minWidth': '100%',
+        },
+    )
+
+    components.append(table_container)
+
+    if pagination_component:
+        components.append(pagination_component)
+
+    # Container final com largura responsiva
+    return html.Div(
+        components,
+        style={
+            'width': '100%',
+            'maxWidth': '100%',
+            'margin': '0 auto',
+        },
+    )
+
+
 # Callback para adicionar o conteúdo da página dentro do tab Preços
+# - Usando o dmc.Table
 @app.callback(
-    Output({'type': 'spreadsheet', 'id': 'sheet'}, 'data'),
+    Output('historico-tabela-container', 'children'),
     Input('df-precos', 'data'),
     prevent_initial_call=True,
 )
-def tabela_historico(
-    df1,
-):
-    df1 = pd.DataFrame(df1)
-    # Deleted columns success
-    df1.drop(['success'], axis=1, inplace=True)
+def tabela_historico(df1):
+    try:
+        df1 = pd.DataFrame(df1)
+        # Deleted columns success
+        if 'success' in df1.columns:
+            df1.drop(['success'], axis=1, inplace=True)
 
-    # Reordered column last
-    df1_columns = [col for col in df1.columns if col != 'last']
-    df1_columns.insert(0, 'last')
-    df1 = df1[df1_columns]
+        # Reordered columns
+        desired_column_order = [
+            'timestamp',
+            'last',
+            'var',
+            'vol',
+            'high',
+            'low',
+            'buy',
+            'sell',
+            'market',
+        ]
+        available_columns = [
+            col for col in desired_column_order if col in df1.columns
+        ]
+        other_columns = [
+            col for col in df1.columns if col not in desired_column_order
+        ]
+        final_column_order = available_columns + other_columns
+        df1 = df1[final_column_order]
 
-    # Reordered column var
-    df1_columns = [col for col in df1.columns if col != 'var']
-    df1_columns.insert(1, 'var')
-    df1 = df1[df1_columns]
+        df1 = df1.sort_values(
+            by='timestamp', ascending=False, na_position='last'
+        )
 
-    # Reordered column timestamp
-    df1_columns = [col for col in df1.columns if col != 'timestamp']
-    df1_columns.insert(0, 'timestamp')
-    df1 = df1[df1_columns]
+        # Usar a função utilitária para criar
+        # a tabela com paginação e ordenação
+        table = criar_tabela_dmc(
+            df1,
+            caption='Histórico de preços por mercado',
+            table_id='historico-data-table',
+            with_pagination=True,
+            rows_per_page=10,
+            sortable=True,
+        )
 
-    # Reordered column vol
-    df1_columns = [col for col in df1.columns if col != 'vol']
-    df1_columns.insert(3, 'vol')
-    df1 = df1[df1_columns]
+        download_button = dmc.Button(
+            'Exportar para CSV',
+            leftSection=DashIconify(icon='mdi:file-export', width=20),
+            variant='outline',
+            color='blue',
+            id='download-csv-button',
+            mt='md',
+            mb='md',
+        )
 
-    # Reordered column market
-    df1_columns = [col for col in df1.columns if col != 'market']
-    df1_columns.insert(9, 'market')
-    df1 = df1[df1_columns]
-    df1 = df1.sort_values(by='timestamp', ascending=False, na_position='last')
+        download_component = dcc.Download(id='download-csv')
 
-    return df1.to_dict('records')
-
-
-@mito_callback(
-    Output('output1', 'children'),
-    Input({'type': 'spreadsheet', 'id': 'sheet'}, 'spreadsheet_result'),
-)
-def update_code(spreadsheet_result):
-    return html.Div([
-        html.H3('Spreadsheet Result'),
-        dmc.Code(
-            spreadsheet_result.code(),
-            style={'whiteSpace': 'pre-wrap'},
-            block=True,
-        ),
-        html.Div(f'Selection: {spreadsheet_result.selection()}'),
-        html.Div(f'Dataframes: {spreadsheet_result.dfs()}'),
-    ])
+        return [download_button, download_component, table]
+    except Exception as e:
+        return html.Div(
+            children=[
+                html.H5(children=f'Erro ao carregar tabela: {e}'),
+                dcc.Markdown(
+                    '{}'.format(traceback.format_exc()),
+                    style={'font-size': '12pt'},
+                ),
+            ]
+        )
 
 
-# callback para calcular o valor total em reais
-# com base na porcentagem do botao clicado
+# Callback para download de CSV
 @app.callback(
-    Output('total-reais', 'value'),
-    Input('reais-10', 'n_clicks'),
-    Input('reais-25', 'n_clicks'),
-    Input('reais-50', 'n_clicks'),
-    Input('reais-100', 'n_clicks'),
-    State('df-balance', 'data'),
+    Output('download-csv', 'data'),
+    Input('download-csv-button', 'n_clicks'),
+    State('df-precos', 'data'),
     prevent_initial_call=True,
 )
-def calcular_porcentagem_reais(
-    n_clicks_10, n_clicks_25, n_clicks_50, n_clicks_100, df_balance
-):
-    if not ctx.triggered:
-        raise PreventUpdate
-    else:
-        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-
-    df_balance = pd.DataFrame(df_balance)
-    df_balance = df_balance['BRL'].iloc[0]
-
-    if button_id == 'reais-10':
-        valor = float(df_balance) * 0.1
-    elif button_id == 'reais-25':
-        valor = float(df_balance) * 0.25
-    elif button_id == 'reais-50':
-        valor = float(df_balance) * 0.5
-    elif button_id == 'reais-100':
-        valor = float(df_balance)
-    else:
-        valor = 0
-    return valor
+def download_csv(n_clicks, data):
+    df = pd.DataFrame(data)
+    return dcc.send_data_frame(df.to_csv, 'historico_precos.csv', index=False)
 
 
-# Callback para calcular a quantidade de BTC
-# com base na porcentagem do botao clicado
-@app.callback(
-    Output(
-        'amount-venda',
-        'value',
-        allow_duplicate=True,
-    ),
-    Input('amount-10', 'n_clicks'),
-    Input('amount-25', 'n_clicks'),
-    Input('amount-50', 'n_clicks'),
-    Input('amount-100', 'n_clicks'),
-    State('df-balance', 'data'),
-    prevent_initial_call=True,
-)
-def calcular_porcentagem_btc(
-    n_clicks_10, n_clicks_25, n_clicks_50, n_clicks_100, df_balance
-):
-    if not ctx.triggered:
-        raise PreventUpdate
-    else:
-        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-
-    df_balance = pd.DataFrame(df_balance)
-    df_balance = df_balance['BTC'].iloc[0]
-
-    if button_id == 'amount-10':
-        valor = float(df_balance) * 0.1
-    elif button_id == 'amount-25':
-        valor = float(df_balance) * 0.25
-    elif button_id == 'amount-50':
-        valor = float(df_balance) * 0.5
-    elif button_id == 'amount-100':
-        valor = float(df_balance)
-    else:
-        valor = 0
-    return valor
-
-
+# Tabela de ordens com dmc.Table
 @app.callback(
     Output('tab-ordens', 'children'),
     Input('tabs', 'value'),
@@ -387,10 +549,16 @@ def ordens_tab(value, executed_orders_df, balance_df, df_precos):
                 grid={'rows': 1, 'columns': 2, 'pattern': 'independent'},
             )
 
-            # Criando a Table com as ordens de compra e venda
-            table = Spreadsheet(
-                executed_orders_df, id={'type': 'spreadsheet', 'id': 'sheet2'}
+            # Usar a função utilitária para criar a tabela com paginação
+            table = criar_tabela_dmc(
+                executed_orders_df,
+                caption='Histórico de ordens executadas',
+                table_id='orders-data-table',
+                with_pagination=True,
+                rows_per_page=5,
+                sortable=True,
             )
+
             return html.Div(
                 children=[
                     dcc.Graph(
@@ -418,24 +586,54 @@ def ordens_tab(value, executed_orders_df, balance_df, df_precos):
 @app.callback(
     Output('preco-compra', 'value'),
     Input('df-precos', 'data'),
+    State('market-compra', 'value'),
 )
-def atualizar_preco_compra_input(df_precos):
+def atualizar_preco_compra_input(df_precos, selected_markets):
     df_precos = pd.DataFrame(df_precos)
 
-    preco_compra = df_precos['last'].iloc[-1]
-    return preco_compra
+    # Se o mercado selecionado for específico, use o preço dele
+    if (
+        selected_markets
+        and len(selected_markets) > 0
+        and 'market' in df_precos.columns
+    ):
+        # Filter for the first selected market
+        primary_market = selected_markets[0]
+        filtered_df = df_precos[
+            df_precos['market'].str.upper() == primary_market
+        ]
+        if not filtered_df.empty:
+            return filtered_df['last'].iloc[0]
+
+    # Caso contrário, use o último preço disponível
+    return df_precos['last'].iloc[-1]
 
 
 # Atualizando o preco-venda com o valor do último preço
 @app.callback(
     Output('preco-venda', 'value'),
     Input('df-precos', 'data'),
+    State('market-venda', 'value'),
 )
-def atualizar_preco_venda_input(df_precos):
+def atualizar_preco_venda_input(df_precos, selected_markets):
     df_precos = pd.DataFrame(df_precos)
-    ultimo_preco = df_precos['last'].iloc[-1]
 
-    return ultimo_preco
+    # Se o mercado selecionado for específico, use o preço dele
+    if (
+        selected_markets
+        and len(selected_markets) > 0
+        and 'market' in df_precos.columns
+    ):
+        # Filter for the first selected market
+        primary_market = selected_markets[0]
+        filtered_df = df_precos[
+            df_precos['market'].str.upper() == primary_market
+        ]
+        if not filtered_df.empty:
+            return filtered_df['last'].iloc[0]
+
+    # Caso contrário, use o último preço disponível
+    return df_precos['last'].iloc[-1]
 
 
 # Chamada para aproximar o amount de compra para bitcoin
@@ -511,14 +709,16 @@ def aproximar_amount_venda(  # noqa: PLR0913, PLR0917
     State('market-venda', 'value'),
     prevent_initial_call=True,
 )
-def vender(n_clicks, preco_venda, total_reais, amount, tipo_ordem, mercado):  # noqa: PLR0913, PLR0917
-    if n_clicks is not None:
+def vender(n_clicks, preco_venda, total_reais, amount, tipo_ordem, mercados):  # noqa: PLR0913, PLR0917
+    if n_clicks is not None and mercados and len(mercados) > 0:
         limited = tipo_ordem == 'limited'
+        # Usa apenas o primeiro mercado selecionado para a venda
+        mercado = mercados[0]
         resposta_venda = Sell(
             preco_venda, preco_venda, amount, limited, market=mercado
         )
         return f'\nVendeu\n{resposta_venda}'
-    return n_clicks
+    return 'Selecione pelo menos um mercado'
 
 
 # Callback para comprar
@@ -532,14 +732,16 @@ def vender(n_clicks, preco_venda, total_reais, amount, tipo_ordem, mercado):  # 
     State('market-compra', 'value'),
     prevent_initial_call=True,
 )
-def comprar(n_clicks, preco_compra, total_reais, amount, tipo_ordem, mercado):  # noqa: PLR0913, PLR0917
-    if n_clicks is not None:
+def comprar(n_clicks, preco_compra, total_reais, amount, tipo_ordem, mercados):  # noqa: PLR0913, PLR0917
+    if n_clicks is not None and mercados and len(mercados) > 0:
         limited = tipo_ordem == 'limited'
+        # Usa apenas o primeiro mercado selecionado para a compra
+        mercado = mercados[0]
         resposta_compra = Buy(
             preco_compra, total_reais, amount, limited, market=mercado
         )
         return f'\nComprou\n{resposta_compra}'
-    return n_clicks
+    return 'Selecione pelo menos um mercado'
 
 
 # pathname
@@ -615,72 +817,91 @@ def toggle_aside(opened, aside):
     return aside
 
 
-# Callback para dispara uma notificação
-# quando um trigger do estrategias.py é acionado
-# @callback(
-#     Output('notify-container', 'children'),
-#     Input('interval-component-dash', 'n_intervals'),
-#     prevent_initial_call=True,
-# )
-# def alerta_preco(n_intervals):
-#     # lendo o arquivo de ordens
-#     log_file_path = CAMINHO + r'\log.csv'
-#     log_df = pd.read_csv(log_file_path, sep=';', encoding='utf-8')
+# Callback para ordenação de tabela
+@app.callback(
+    Output({'type': 'table', 'id': ALL}, 'data'),
+    Input({'type': 'sort-icon', 'column': ALL, 'table': ALL}, 'n_clicks'),
+    State({'type': 'table-data', 'id': ALL}, 'data'),
+    prevent_initial_call=True,
+)
+def sort_table(n_clicks, stored_data):
+    """
+    Ordena a tabela quando um ícone de ordenação é clicado.
+    """
+    # Identificar qual coluna foi clicada para ordenação
+    if not ctx.triggered:
+        return no_update
 
-#     # Converte a coluna 'time' para datetime
-#     log_df['time'] = pd.to_datetime(log_df['time'], format='mixed')
+    trigger = ctx.triggered[0]['prop_id']
+    if not trigger:
+        return no_update
 
-#     # verificando se o ultimo log foi a seguntos atrás ou agora mesmo
-#     last_log = log_df['time'].iloc[-1]
+    # Extrair coluna e tabela do ID
+    trigger_dict = json.loads(trigger.split('.')[0])
+    column = trigger_dict.get('column')
+    table_id = trigger_dict.get('table')
 
-#     now = datetime.datetime.now()  # Obtém a data e hora atuais
+    # Encontrar os dados da tabela correta
+    for i, data in enumerate(stored_data):
+        if data and data.get('table_id') == table_id:
+            df = pd.DataFrame(data['df'])
 
-#     # Calcula a diferença entre os dois objetos datetime
-#     time_difference = now - last_log
-#     # Acessa o atributo seconds do objeto timedelta
-#     tempo_comparado = get_interval() * 0.5
-#     auto_close = tempo_comparado * 1000
-#     if time_difference.seconds < tempo_comparado:
-#         loglevel = log_df['levelname'].iloc[-1]
-#         if loglevel == 'INFO':
-#             return dmc.Notification(
-#                 id='my-notification',
-#                 title='Mensagem do Robô',
-#                 message=log_df['message'].iloc[-1],
-#                 color='blue',
-#                 action='show',
-#                 autoClose=auto_close,
-#                 icon=DashIconify(icon='logos:geekbot'),
-#             )
-#         elif loglevel == 'WARNING':
-#             return dmc.Notification(
-#                 id='my-notification',
-#                 title='Atenção',
-#                 message=log_df['message'].iloc[-1],
-#                 color='yellow',
-#                 action='show',
-#                 autoClose=auto_close,
-#                 icon=DashIconify(icon='twemoji:warning'),
-#             )
-#         elif loglevel == 'ERROR':
-#             return dmc.Notification(
-#                 id='my-notification',
-#                 title='Mensagem do Robô',
-#                 message=log_df['message'].iloc[-1],
-#                 color='red',
-#                 action='show',
-#                 autoClose=auto_close,
-#                 icon=DashIconify(icon='twemoji:cross-mark'),
-#             )
-#         else:
-#             return dmc.Notification(
-#                 id='my-notification',
-#                 title='Mensagem do Robô',
-#                 message=log_df['message'].iloc[-1],
-#                 color='green',
-#                 action='show',
-#                 autoClose=auto_close,
-#                 icon=DashIconify(icon='twemoji:check-mark'),
-#             )
-#     else:
-#         return
+            # Verificar direção atual de ordenação e alternar
+            if data.get('sort_column') == column and data.get(
+                'sort_ascending'
+            ):
+                df = df.sort_values(by=column, ascending=False)
+                data['sort_ascending'] = False
+            else:
+                df = df.sort_values(by=column, ascending=True)
+                data['sort_column'] = column
+                data['sort_ascending'] = True
+
+            # Atualizar dados
+            data['df'] = df.to_dict('records')
+
+            # Retornar dados atualizados
+            return [data]
+
+    return no_update
+
+
+# Adaptar o callback de ordenação para trabalhar com a nova estrutura
+@app.callback(
+    Output({'type': 'sort-icon', 'column': ALL, 'table': ALL}, 'style'),
+    Input({'type': 'sort-icon', 'column': ALL, 'table': ALL}, 'n_clicks'),
+    State({'type': 'sort-icon', 'column': ALL, 'table': ALL}, 'id'),
+    prevent_initial_call=True,
+)
+def update_sort_icons(n_clicks, ids):
+    """
+    Atualiza os ícones de ordenação quando clicados.
+    """
+    if not ctx.triggered:
+        return no_update
+
+    trigger = ctx.triggered[0]['prop_id']
+    if not trigger or '.' not in trigger:
+        return no_update
+
+    # Identificar qual ícone foi clicado
+    clicked_id = json.loads(trigger.split('.')[0])
+
+    # Atualizar estilos para todos os ícones
+    styles = []
+    for icon_id in ids:
+        if (
+            icon_id['column'] == clicked_id['column']
+            and icon_id['table'] == clicked_id['table']
+        ):
+            # Ícone clicado - destacar
+            styles.append({
+                'marginLeft': '5px',
+                'cursor': 'pointer',
+                'color': 'blue',
+            })
+        else:
+            # Outros ícones - estilo normal
+            styles.append({'marginLeft': '5px', 'cursor': 'pointer'})
+
+    return styles

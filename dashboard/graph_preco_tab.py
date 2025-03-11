@@ -251,15 +251,19 @@ def preco_tab(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                 str(int(data_recency_candlestick)), '1m'
             )
 
-            df2 = get_klines(interval=intervalo)
+            df2 = get_klines(
+                interval=intervalo,
+                startTime=minutes_ago,
+                endTime=now,
+            )
 
             fig1.add_trace(
                 go.Candlestick(
-                    x=df2['Kline open time'],
-                    open=df2['Open price'],
-                    high=df2['High price'],
-                    low=df2['Low price'],
-                    close=df2['Close price'],
+                    x=df2['timestamp'],
+                    open=df2['open'],
+                    high=df2['high'],
+                    low=df2['low'],
+                    close=df2['close'],
                     name='Api Binance',
                 )
             )

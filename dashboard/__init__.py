@@ -1,6 +1,5 @@
 import dash_mantine_components as dmc
 from dash import Dash, _dash_renderer  # noqa: PLC2701
-from mitosheet.mito_dash.v1 import activate_mito
 from rich.traceback import install
 
 from segredos import SECRET_KEY
@@ -14,7 +13,6 @@ app = Dash(
     url_base_pathname='/',
     external_stylesheets=dmc.styles.ALL,
 )
-activate_mito(app)
 server = app.server
 app.config.suppress_callback_exceptions = True
 

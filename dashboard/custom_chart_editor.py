@@ -9,6 +9,7 @@ class ChartEditor:
     def __init__(  # noqa: PLR0913, PLR0917
         self,
         app,
+        instance_id='main',  # Novo parâmetro para identificar a instância
         data_source=None,
         container_id='pattern-match-container',
         modal_size='85%',
@@ -17,12 +18,15 @@ class ChartEditor:
         default_title='Figure',  # Renomeado de figure_title para default_title
         card_size=400,
         initial_cards=0,
+        update_interval_id=None,
+        data_update_function=None,
     ):
         """
         Inicializa o editor de gráficos
 
         Args:
             app: Instância do Dash app
+            instance_id: ID único para esta instância doeditor(evita conflitos)
             data_source: Dicionário com os dados para o editor
             container_id: ID do container onde os cards serão renderizados
             modal_size: Tamanho do modal
@@ -33,18 +37,28 @@ class ChartEditor:
             default_title: Título padrão quando não há título específico
             card_size: Tamanho dos cards em pixels
             initial_cards: Número de cards para criar inicialmente
+            update_interval_id: ID do componente de
+            intervalo para atualização periódica
+            data_update_function: Função que retorna
+            dados atualizados quando chamada
         """
         self.app = app
-        self.container_id = container_id
+        self.instance_id = instance_id
+        self.container_id = f'{instance_id}-{container_id}'
         self.card_size = card_size
         self.df1 = data_source
-        self.data_source = data_source.to_dict(
-            'list'
-        ) or px.data.iris().to_dict('list')
+        self.data_source = (
+            data_source.to_dict('list')
+            if data_source is not None
+            else px.data.iris().to_dict('list')
+        )
         # Converter entrada única em lista se necessário
         if default_figures and not isinstance(default_figures, list):
             default_figures = [default_figures]
         self.default_figures = default_figures or [go.Figure()]
+        self.update_interval_id = update_interval_id
+        self.data_update_function = data_update_function
+        self.update_data_params = {}  # Adicionar o atributo update_data_params
 
         # Inicializa os títulos
         if figure_titles and not isinstance(figure_titles, list):
@@ -53,9 +67,29 @@ class ChartEditor:
         self.default_title = default_title
         self.initial_cards = initial_cards
 
+        # IDs base para componentes dinâmicos
+        self.component_ids = {
+            'store': f'{self.container_id}-oldSum',
+            'figures_store': f'{self.container_id}-figures-store',
+            'editor_menu': f'{self.container_id}-editorMenu',
+            'editor': f'{self.container_id}-editor',
+            'chart_id': f'{self.container_id}-chartId',
+            'reset_editor': f'{self.container_id}-resetEditor',
+            'save_editor': f'{self.container_id}-saveEditor',
+            'save_close_editor': f'{self.container_id}-saveCloseEditor',
+            'add_chart': f'{self.container_id}-add-chart',
+            'dynamic_edit': f'{self.container_id}-dynamic-edit',
+            'dynamic_delete': f'{self.container_id}-dynamic-delete',
+            'dynamic_output': f'{self.container_id}-dynamic-output',
+            'dynamic_card': f'{self.container_id}-dynamic-card',
+        }
+
         # Cria os componentes
         self.modal = self._create_modal(modal_size)
-        self.store = dcc.Store(id=f'{container_id}-oldSum', data=0)
+        self.store = dcc.Store(id=self.component_ids['store'], data=0)
+        self.figures_store = dcc.Store(
+            id=self.component_ids['figures_store'], data=self.default_figures
+        )
 
         # Registra as callbacks
         self._register_callbacks()
@@ -69,7 +103,7 @@ class ChartEditor:
                             'Editando Gráfico com Identificador', order=3
                         ),
                         dmc.NumberInput(
-                            id=f'{self.container_id}-chartId',
+                            id=self.component_ids['chart_id'],
                             variant='unstyled',
                             min=0,
                             size='xl',
@@ -81,20 +115,20 @@ class ChartEditor:
                 ),
                 dce.DashChartEditor(
                     dataSources=self.data_source,
-                    id=f'{self.container_id}-editor',
+                    id=self.component_ids['editor'],
                     style={'height': '60vh'},
                 ),
                 dmc.Group(
                     [
                         dmc.Button(
-                            'Reset', id=f'{self.container_id}-resetEditor'
+                            'Reset', id=self.component_ids['reset_editor']
                         ),
                         dmc.Button(
-                            'Save', id=f'{self.container_id}-saveEditor'
+                            'Save', id=self.component_ids['save_editor']
                         ),
                         dmc.Button(
                             'Save & Close',
-                            id=f'{self.container_id}-saveCloseEditor',
+                            id=self.component_ids['save_close_editor'],
                             variant='outline',
                         ),
                     ],
@@ -102,7 +136,7 @@ class ChartEditor:
                     mt='md',
                 ),
             ],
-            id=f'{self.container_id}-editorMenu',
+            id=self.component_ids['editor_menu'],
             size=size,
             opened=False,
         )
@@ -133,8 +167,9 @@ class ChartEditor:
                                     dmc.Button(
                                         'Editar ?',
                                         id={
-                                            'type': f'{self.container_id}'
-                                            + '-dynamic-edit',
+                                            'type': self.component_ids[
+                                                'dynamic_edit'
+                                            ],
                                             'index': n_clicks,
                                         },
                                         variant='light',
@@ -143,8 +178,9 @@ class ChartEditor:
                                     dmc.Button(
                                         'X',
                                         id={
-                                            'type': f'{self.container_id}'
-                                            + '-dynamic-delete',
+                                            'type': self.component_ids[
+                                                'dynamic_delete'
+                                            ],
                                             'index': n_clicks,
                                         },
                                         variant='subtle',
@@ -164,7 +200,7 @@ class ChartEditor:
                 dmc.CardSection(
                     dcc.Graph(
                         id={
-                            'type': f'{self.container_id}-dynamic-output',
+                            'type': self.component_ids['dynamic_output'],
                             'index': n_clicks,
                         },
                         style={'height': 400},
@@ -179,7 +215,7 @@ class ChartEditor:
             style={'width': 400, 'display': 'inline-block'},
             m='xs',
             id={
-                'type': f'{self.container_id}-dynamic-card',
+                'type': self.component_ids['dynamic_card'],
                 'index': n_clicks,
             },
         )
@@ -187,7 +223,7 @@ class ChartEditor:
     def _register_callbacks(self):
         @self.app.callback(
             Output(self.container_id, 'children'),
-            Input(f'{self.container_id}-add-chart', 'n_clicks'),
+            Input(self.component_ids['add_chart'], 'n_clicks'),
         )
         def add_card(n_clicks):
             if n_clicks is None:
@@ -200,11 +236,11 @@ class ChartEditor:
         @self.app.callback(
             Output(self.container_id, 'children', allow_duplicate=True),
             Input(
-                {'type': f'{self.container_id}-dynamic-delete', 'index': ALL},
+                {'type': self.component_ids['dynamic_delete'], 'index': ALL},
                 'n_clicks',
             ),
             State(
-                {'type': f'{self.container_id}-dynamic-card', 'index': ALL},
+                {'type': self.component_ids['dynamic_card'], 'index': ALL},
                 'id',
             ),
             prevent_initial_call=True,
@@ -220,21 +256,21 @@ class ChartEditor:
             return no_update
 
         @self.app.callback(
-            Output(f'{self.container_id}-editorMenu', 'opened'),
-            Output(f'{self.container_id}-editor', 'loadFigure'),
-            Output(f'{self.container_id}-chartId', 'value'),
-            Output(f'{self.container_id}-oldSum', 'data'),
+            Output(self.component_ids['editor_menu'], 'opened'),
+            Output(self.component_ids['editor'], 'loadFigure'),
+            Output(self.component_ids['chart_id'], 'value'),
+            Output(self.component_ids['store'], 'data'),
             Input(
-                {'type': f'{self.container_id}-dynamic-edit', 'index': ALL},
+                {'type': self.component_ids['dynamic_edit'], 'index': ALL},
                 'n_clicks',
             ),
             State(
-                {'type': f'{self.container_id}-dynamic-output', 'index': ALL},
+                {'type': self.component_ids['dynamic_output'], 'index': ALL},
                 'figure',
             ),
-            State(f'{self.container_id}-oldSum', 'data'),
+            State(self.component_ids['store'], 'data'),
             State(
-                {'type': f'{self.container_id}-dynamic-card', 'index': ALL},
+                {'type': self.component_ids['dynamic_card'], 'index': ALL},
                 'id',
             ),
             prevent_initial_call=True,
@@ -264,18 +300,18 @@ class ChartEditor:
 
         @self.app.callback(
             Output(
-                f'{self.container_id}-editor',
+                self.component_ids['editor'],
                 'loadFigure',
                 allow_duplicate=True,
             ),
-            Input(f'{self.container_id}-resetEditor', 'n_clicks'),
+            Input(self.component_ids['reset_editor'], 'n_clicks'),
             State(
-                {'type': f'{self.container_id}-dynamic-output', 'index': ALL},
+                {'type': self.component_ids['dynamic_output'], 'index': ALL},
                 'figure',
             ),
-            State(f'{self.container_id}-chartId', 'value'),
+            State(self.component_ids['chart_id'], 'value'),
             State(
-                {'type': f'{self.container_id}-dynamic-card', 'index': ALL},
+                {'type': self.component_ids['dynamic_card'], 'index': ALL},
                 'id',
             ),
             prevent_initial_call=True,
@@ -291,21 +327,22 @@ class ChartEditor:
             return {'data': [], 'layout': {}}
 
         @self.app.callback(
-            Output(f'{self.container_id}-editor', 'saveState'),
-            Input(f'{self.container_id}-saveEditor', 'n_clicks'),
-            Input(f'{self.container_id}-saveCloseEditor', 'n_clicks'),
+            Output(self.component_ids['editor'], 'saveState'),
+            Input(self.component_ids['save_editor'], 'n_clicks'),
+            Input(self.component_ids['save_close_editor'], 'n_clicks'),
         )
         def save_figure(n, n1):
             if n or n1:
                 return True
+            return no_update
 
         @self.app.callback(
             Output(
-                f'{self.container_id}-editorMenu',
+                self.component_ids['editor_menu'],
                 'opened',
                 allow_duplicate=True,
             ),
-            Input(f'{self.container_id}-saveCloseEditor', 'n_clicks'),
+            Input(self.component_ids['save_close_editor'], 'n_clicks'),
             prevent_initial_call=True,
         )
         def close_editor(n):
@@ -313,13 +350,17 @@ class ChartEditor:
                 return False
             return no_update
 
+        # Cria um ID dinâmico específico para
+        # cada instância para o componente code-highlight
+        code_highlight_id = 'code-highlight'
+
         @self.app.callback(
             Output(self.container_id, 'children', allow_duplicate=True),
-            Output('code-highlight', 'code'),
-            Input(f'{self.container_id}-editor', 'figure'),
-            State(f'{self.container_id}-chartId', 'value'),
+            Output(code_highlight_id, 'code', allow_duplicate=True),
+            Input(self.component_ids['editor'], 'figure'),
+            State(self.component_ids['chart_id'], 'value'),
             State(
-                {'type': f'{self.container_id}-dynamic-card', 'index': ALL},
+                {'type': self.component_ids['dynamic_card'], 'index': ALL},
                 'id',
             ),
             prevent_initial_call=True,
@@ -337,6 +378,60 @@ class ChartEditor:
                         return figs, str(figure)
             return no_update, no_update
 
+        # Nova callback para atualização periódica dos gráficos
+        if self.update_interval_id:
+
+            @self.app.callback(
+                Output(self.component_ids['figures_store'], 'data'),
+                Output(
+                    {
+                        'type': self.component_ids['dynamic_output'],
+                        'index': ALL,
+                    },
+                    'figure',
+                    allow_duplicate=True,
+                ),
+                Output(
+                    self.component_ids['editor'],
+                    'dataSources',
+                    allow_duplicate=True,
+                ),
+                Input(self.update_interval_id, 'n_intervals'),
+                State(
+                    {
+                        'type': self.component_ids['dynamic_card'],
+                        'index': ALL,
+                    },
+                    'id',
+                ),
+                prevent_initial_call=True,
+            )
+            def update_data_periodically(n_intervals, ids):
+                if n_intervals is None or self.data_update_function is None:
+                    return no_update, no_update, no_update
+
+                # Obter dados atualizados usando os parâmetros de data
+                updated_data_source, updated_figures = (
+                    self.data_update_function(**self.update_data_params)
+                )
+
+                if updated_data_source is not None:
+                    self.df1 = updated_data_source
+                    self.data_source = updated_data_source.to_dict('list')
+
+                if updated_figures is not None:
+                    self.default_figures = updated_figures
+
+                    # Atualizar todos os gráficos existentes
+                    updated_graphs = []
+                    for i in range(len(ids)):
+                        fig_index = ids[i]['index'] % len(updated_figures)
+                        updated_graphs.append(updated_figures[fig_index])
+
+                    return updated_figures, updated_graphs, self.data_source
+
+                return no_update, no_update, no_update
+
     def get_layout(self):
         # Criar cards iniciais
         initial_children = (
@@ -345,12 +440,19 @@ class ChartEditor:
             else []
         )
 
+        # Cria o componente code-highlight específico para essa instância
+        code_highlight = dcc.Store(
+            id=f'{self.instance_id}-code-highlight', data=''
+        )
+
         return dmc.Container(
             [
                 self.store,
+                self.figures_store,  # Nova store para armazenar figuras
+                code_highlight,  # Adiciona o componente code-highlight
                 dmc.Button(
                     'Adicionar Novo Gráfico?',
-                    id=f'{self.container_id}-add-chart',
+                    id=self.component_ids['add_chart'],
                     variant='filled',
                     n_clicks=self.initial_cards,
                 ),
@@ -390,19 +492,60 @@ if __name__ == '__main__':
         'Histogram - Sepal Width Distribution',
     ]
 
-    # Usar o editor com múltiplas figuras e títulos
-    editor = ChartEditor(
+    # Exemplo de uso com duas instâncias diferentes
+    editor1 = ChartEditor(
         app,
+        instance_id='page1',  # ID de instância único para primeira página
         data_source=df,
-        default_figures=default_figs,
-        figure_titles=figure_titles,  # Passa os títulos específicos
-        default_title='Iris Chart',  # Título padrão caso necessário
+        default_figures=default_figs[:2],  # Primeiros dois gráficos
+        figure_titles=figure_titles[:2],
+        default_title='Iris Chart Page 1',
         card_size=400,
-        initial_cards=3,  # Criar 3 cards iniciais com diferentes visualizações
+        initial_cards=2,
     )
 
+    editor2 = ChartEditor(
+        app,
+        instance_id='page2',  # ID de instância único para segunda página
+        data_source=df,
+        default_figures=default_figs[1:],  # A partir do segundo gráfico
+        figure_titles=figure_titles[1:],
+        default_title='Iris Chart Page 2',
+        card_size=400,
+        initial_cards=2,
+    )
+
+    # Layout da aplicação com as duas instâncias em abas diferentes
     app.layout = dmc.MantineProvider(
-        [editor.get_layout()],
+        [
+            dmc.Tabs(
+                [
+                    dmc.TabsList([
+                        dmc.TabsTab('Página 1', value='page1'),
+                        dmc.TabsTab('Página 2', value='page2'),
+                    ]),
+                    dmc.TabsPanel(editor1.get_layout(), value='page1'),
+                    dmc.TabsPanel(editor2.get_layout(), value='page2'),
+                ],
+                value='page1',
+                id='page-tabs',
+            ),
+            dmc.CodeHighlight(
+                id='code-highlight',
+                code="""# Kadane's Algorithm
+
+class Solution:
+    def maxSubArray(self, nums: List[int]) -> int:
+        curr, summ = nums[0], nums[0]
+        for n in nums[1:]:
+            curr = max(n, curr + n)
+            summ = max(summ, curr)
+        return summ""",
+                language='python',
+                copyLabel='Copy button code',
+                copiedLabel='Copied!',
+            ),
+        ],
         id='mantine-provider',
         forceColorScheme='light',
     )
