@@ -585,12 +585,18 @@ historico_precos = dmc.Card(
             dmc.Group(
                 children=[
                     dmc.Text('Histórico de Preços', size='lg', fw=700),
-                    dmc.ActionIcon(
-                        DashIconify(icon='carbon:overflow-menu-horizontal'),
-                        color='gray',
-                        variant='transparent',
-                        id='historico-menu',
+                    dmc.Button(
+                        'Exportar para CSV',
+                        leftSection=DashIconify(
+                            icon='mdi:file-export', width=20
+                        ),
+                        variant='outline',
+                        color='blue',
+                        id='download-csv-button',
+                        mt='md',
+                        mb='md',
                     ),
+                    dcc.Download(id='download-csv'),
                 ],
                 justify='space-between',
             ),
@@ -619,38 +625,7 @@ historico_precos = dmc.Card(
 )
 
 balanco_conta = dmc.Card(
-    children=[
-        dmc.CardSection(
-            dmc.Group(
-                children=[
-                    dmc.Text('Balanço da Conta', size='lg', fw=700),
-                    dmc.ActionIcon(
-                        DashIconify(icon='carbon:overflow-menu-horizontal'),
-                        color='gray',
-                        variant='transparent',
-                        id='balanco-menu',
-                    ),
-                ],
-                justify='space-between',
-            ),
-            withBorder=True,
-            inheritPadding=True,
-            py='xs',
-        ),
-        dmc.CardSection(
-            inheritPadding=True,
-            mt='sm',
-            pb='md',
-            children=[
-                html.Div(
-                    id='balanco-tabela-container',
-                    children=[
-                        # Será preenchido pelo callback
-                    ],
-                ),
-            ],
-        ),
-    ],
+    id='balanco-conta',
     withBorder=True,
     shadow='xl',
     radius='md',
@@ -869,8 +844,8 @@ layout_dashboard = html.Div(
         dcc.Store(id='df-balance', storage_type='local'),
         dmc.Grid(
             [
-                dmc.GridCol(graficos, span=6),
-                dmc.GridCol(historico_precos, span=6),
+                dmc.GridCol(graficos, span=8),
+                dmc.GridCol(historico_precos, span=4),
                 dmc.GridCol(painel_alertas, span=3),
                 dmc.GridCol(controle_tempo, span=3),
                 # Ordens de Compra

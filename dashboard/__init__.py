@@ -23,4 +23,9 @@ server.config.update(
 )
 
 
-from dashboard import callbacks, graph_preco_tab, views  # noqa: E402, F401
+from dashboard import (  # noqa: E402, F401
+    callbacks,
+    graph_preco_tab,
+    routers,
+    views,
+)

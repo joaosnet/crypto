@@ -29,7 +29,6 @@ from dashboard import app, dash_utils
 from dashboard.componentes_personalizados import (
     bar_precos_atuais,
 )
-from dashboard.views import layout_dashboard
 from db.duckdb_csv import load_csv_in_records
 
 # from crypto.timescaledb import read_from_db
@@ -143,8 +142,9 @@ def update_coinpair(filtro, compra, venda):
 
 # Callback para atualizar os ícones das abas
 @app.callback(
-    [Output('preco-icon', 'icon'), Output('ordens-icon', 'icon')],
-    [Input('df-precos', 'data'), Input('df-executed-orders', 'data')],
+    Output('preco-icon', 'icon'),
+    Input('df-precos', 'data'),
+    Input('df-executed-orders', 'data'),
 )
 def update_tab_icons(df_precos, df_executed_orders):
     df_precos = pd.DataFrame(df_precos)
@@ -161,11 +161,7 @@ def update_tab_icons(df_precos, df_executed_orders):
         else 'hugeicons:bitcoin-down-02'
     )
 
-    # Lógica para o ícone de Ordens de Compra
-    num_orders = len(df_executed_orders)
-    ordens_icon = 'mdi:cart' if num_orders > 0 else 'mdi:cart-outline'
-
-    return preco_icon, ordens_icon
+    return preco_icon
 
 
 # Callback para adicionar o conteúdo da página dentro do tab Preços
@@ -200,11 +196,11 @@ def criar_tabela_dmc(  # noqa: PLR0913, PLR0917
     vertical_spacing='xs',
     horizontal_spacing='md',
     # Parâmetros de paginação
-    with_pagination=False,
-    rows_per_page=10,
+    with_pagination=True,
+    rows_per_page=3,
     pagination_size='sm',
     # Parâmetros de ordenação
-    sortable=False,
+    sortable=True,
     # Parâmetros de ocultação de colunas
     hidden_columns=None,
 ):
@@ -430,25 +426,9 @@ def tabela_historico(df1):
         table = criar_tabela_dmc(
             df1,
             caption='Histórico de preços por mercado',
-            table_id='historico-data-table',
-            with_pagination=True,
-            rows_per_page=10,
-            sortable=True,
         )
 
-        download_button = dmc.Button(
-            'Exportar para CSV',
-            leftSection=DashIconify(icon='mdi:file-export', width=20),
-            variant='outline',
-            color='blue',
-            id='download-csv-button',
-            mt='md',
-            mb='md',
-        )
-
-        download_component = dcc.Download(id='download-csv')
-
-        return [download_button, download_component, table]
+        return [table]
     except Exception as e:
         return html.Div(
             children=[
@@ -475,111 +455,141 @@ def download_csv(n_clicks, data):
 
 # Tabela de ordens com dmc.Table
 @app.callback(
-    Output('tab-ordens', 'children'),
-    Input('tabs', 'value'),
+    Output('balanco-conta', 'children'),
     Input('df-executed-orders', 'data'),
     Input('df-balance', 'data'),
     Input('df-precos', 'data'),
     prevent_initial_call=True,
 )
-def ordens_tab(value, executed_orders_df, balance_df, df_precos):
+def ordens_tab(executed_orders_df, balance_df, df_precos):
     try:
-        if value == 'Ordens de Compra':
-            executed_orders_df = pd.DataFrame(executed_orders_df)
-            # Criando um Gráfico de anel para o balance da minha conta
-            balance_df = pd.DataFrame(balance_df)
-            df_precos = pd.DataFrame(df_precos)
+        executed_orders_df = pd.DataFrame(executed_orders_df)
+        # Criando um Gráfico de anel para o balance da minha conta
+        balance_df = pd.DataFrame(balance_df)
+        df_precos = pd.DataFrame(df_precos)
 
-            balance_df = balance_df.drop(
-                columns=['success', 'utimestamp', 'timestamp']
+        balance_df = balance_df.drop(
+            columns=['success', 'utimestamp', 'timestamp']
+        )
+        balance_df = balance_df.loc[
+            :, (balance_df != 0).any(axis=0)
+        ]  # Remove columns with all zeros
+
+        # Multiplicando o valor do bitcoin pelo valor do último preço
+        if 'BTC' in balance_df.columns:
+            balance_df['BTC'] *= df_precos['last'].iloc[-1]
+
+        fig = go.Figure(
+            data=[
+                go.Pie(
+                    labels=balance_df.columns,
+                    values=balance_df.iloc[0],
+                    hole=0.3,
+                    domain={'row': 1, 'column': 0},
+                    # a cor do BTC é laranja e a cor do BRL é verde
+                    marker_colors=['#FFA500', '#008000'],
+                )
+            ]
+        )
+        # adicionando o saldo em reais aproximado como indicador no gráfico
+        if balance_df.columns[0] == 'BRL':
+            valor_aproximado = balance_df.iloc[0].sum()
+            refeencia = 0
+            dash_utils.add_trace(
+                fig,
+                'Saldo em Reais',
+                valor_aproximado,
+                1,
+                1,
             )
-            balance_df = balance_df.loc[
-                :, (balance_df != 0).any(axis=0)
-            ]  # Remove columns with all zeros
-
-            # Multiplicando o valor do bitcoin pelo valor do último preço
-            if 'BTC' in balance_df.columns:
-                balance_df['BTC'] *= df_precos['last'].iloc[-1]
-
-            fig = go.Figure(
-                data=[
-                    go.Pie(
-                        labels=balance_df.columns,
-                        values=balance_df.iloc[0],
-                        hole=0.3,
-                        domain={'row': 1, 'column': 0},
-                        # a cor do BTC é laranja e a cor do BRL é verde
-                        marker_colors=['#FFA500', '#008000'],
-                    )
-                ]
+        elif (
+            balance_df.columns[0] == 'BTC'
+            or balance_df.columns[0] == 'BTC_LOCKED'
+        ):
+            valor_aproximado = (
+                balance_df['BTC'].sum() + balance_df['BRL'].sum()
             )
-            # adicionando o saldo em reais aproximado como indicador no gráfico
-            if balance_df.columns[0] == 'BRL':
-                valor_aproximado = balance_df.iloc[0].sum()
-                refeencia = 0
-                dash_utils.add_trace(
-                    fig,
-                    'Saldo em Reais',
-                    valor_aproximado,
-                    1,
-                    1,
-                )
-            elif (
-                balance_df.columns[0] == 'BTC'
-                or balance_df.columns[0] == 'BTC_LOCKED'
-            ):
-                valor_aproximado = (
-                    balance_df['BTC'].sum() + balance_df['BRL'].sum()
-                )
-                refeencia = (
-                    executed_orders_df['price'].iloc[0]
-                    * executed_orders_df['amount'].iloc[0]
-                )
-                dash_utils.add_delta_trace(
-                    fig,
-                    'Saldo em Reais',
-                    valor_aproximado,
-                    refeencia,
-                    1,
-                    1,
-                )
-
-            fig.update_layout(
-                title_text='Distribuição do saldo da conta',
-                grid={'rows': 1, 'columns': 2, 'pattern': 'independent'},
+            refeencia = (
+                executed_orders_df['price'].iloc[0]
+                * executed_orders_df['amount'].iloc[0]
+            )
+            dash_utils.add_delta_trace(
+                fig,
+                'Saldo em Reais',
+                valor_aproximado,
+                refeencia,
+                1,
+                1,
             )
 
-            # Usar a função utilitária para criar a tabela com paginação
-            table = criar_tabela_dmc(
-                executed_orders_df,
-                caption='Histórico de ordens executadas',
-                table_id='orders-data-table',
-                with_pagination=True,
-                rows_per_page=5,
-                sortable=True,
-            )
+        fig.update_layout(
+            title_text='Distribuição do saldo da conta',
+            grid={'rows': 1, 'columns': 2, 'pattern': 'independent'},
+        )
 
-            return html.Div(
+        # Usar a função utilitária para criar a tabela com paginação
+        table = criar_tabela_dmc(
+            executed_orders_df,
+            caption='Histórico de ordens executadas',
+        )
+        return [
+            dmc.CardSection(
+                dmc.Group(
+                    children=[
+                        dmc.Text('Balanço da Conta', size='lg', fw=700),
+                        dmc.ActionIcon(
+                            DashIconify(
+                                icon='carbon:overflow-menu-horizontal'
+                            ),
+                            color='gray',
+                            variant='transparent',
+                            id='balanco-menu',
+                        ),
+                    ],
+                    justify='space-between',
+                ),
+                withBorder=True,
+                inheritPadding=True,
+                py='xs',
+            ),
+            dmc.CardSection(
                 children=[
                     dcc.Graph(
                         figure=fig,
-                        mathjax=True,
                         id={'type': 'graph', 'index': 'pie'},
                     ),
-                    html.Hr(),
-                    table,
                 ],
-            )
-    except Exception as error:
-        return html.Div(
-            children=[
-                html.H5(children=f'{error}'),
-                dcc.Markdown(
-                    '{}'.format(traceback.format_exc()),
-                    style={'font-size': '14pt'},
+            ),
+            dmc.CardSection(table,
+                withBorder=True,
+                inheritPadding=True,
+                mt='sm',
+                pb='md',),
+        ]
+    except Exception:
+        return [
+            dmc.CardSection(
+                dmc.Group(
+                    children=[
+                        dmc.Text('Deu erro', size='lg', fw=700),
+                    ],
+                    justify='space-between',
                 ),
-            ]
-        )
+                withBorder=True,
+                inheritPadding=True,
+                py='xs',
+            ),
+            dmc.CardSection(
+                children=dmc.CodeHighlight(
+                    code=traceback.format_exc(),
+                    language='python',
+                ),
+                withBorder=True,
+                inheritPadding=True,
+                mt='sm',
+                pb='md',
+            ),
+        ]
 
 
 # Atualizndo o preco-compra com o valor do último preço
@@ -742,16 +752,6 @@ def comprar(n_clicks, preco_compra, total_reais, amount, tipo_ordem, mercados): 
         )
         return f'\nComprou\n{resposta_compra}'
     return 'Selecione pelo menos um mercado'
-
-
-# pathname
-@app.callback(
-    Output('conteudo_pagina', 'children'),
-    Input('url', 'pathname'),
-)
-def carregar_pagina(pathname):
-    if pathname == '/':
-        return layout_dashboard
 
 
 @app.callback(

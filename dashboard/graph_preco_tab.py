@@ -50,13 +50,6 @@ div_graph_preco = html.Div(
                             ),
                         ),
                         dmc.TabsTab(
-                            'Ordens de Compra',
-                            value='Ordens de Compra',
-                            leftSection=DashIconify(
-                                id='ordens-icon', icon='mdi:cart-outline'
-                            ),
-                        ),
-                        dmc.TabsTab(
                             'editor',
                             value='editor',
                             leftSection=DashIconify(
@@ -81,19 +74,6 @@ div_graph_preco = html.Div(
                     ),
                     value='Preços',
                     id='tab-precos',
-                ),
-                dmc.TabsPanel(
-                    dmc.Stack(
-                        gap=0,
-                        children=[
-                            dmc.Skeleton(h=50, mb='xl'),
-                            dmc.Skeleton(h=8, radius='xl'),
-                            dmc.Skeleton(h=8, my=6),
-                            dmc.Skeleton(h=8, w='70%', radius='xl'),
-                        ],
-                    ),
-                    value='Ordens de Compra',
-                    id='tab-ordens',
                 ),
                 dmc.TabsPanel(
                     dmc.ScrollArea(
