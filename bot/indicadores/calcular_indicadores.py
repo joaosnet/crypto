@@ -1,4 +1,3 @@
-
 import talib as ta
 
 

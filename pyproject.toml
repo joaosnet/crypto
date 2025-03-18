@@ -35,6 +35,7 @@ dependencies = [
     "dash-chart-editor>=0.0.1a5",
     "dash-bootstrap-templates>=1.3.0",
     "backtesting>=0.6.2",
+    "sambo[all]>=1.25.1",
 ]
 
 [tool.uv]
@@ -66,6 +67,8 @@ bot = "python main_bot.py"
 check_bot = "python scripts/process_manager.py main_bot.py"
 start = "task check_bot && task run"
 pos_start = "task stop_bot"
+nav = 'python -c "import webbrowser; webbrowser.open(\"http://127.0.0.1:8050\")"'
+pre_run = 'task nav'
 run = "python main.py"
 stop_bot = "python scripts/kill_process.py main_bot.py"
 test = 'python bot/tests/backtestRunner.py'

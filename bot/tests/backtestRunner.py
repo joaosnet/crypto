@@ -1,143 +1,58 @@
 import sys
 from pathlib import Path
 
-import pandas as pd
-import talib as ta
-from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
-
 # Adiciona o diretório raiz ao path para poder importar os módulos do projeto
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
+from datetime import datetime, timedelta, timezone
+
+import pandas as pd
+from backtesting import Backtest
+from rich.traceback import install
+
+from bot.estrategias.daytrade import DaytradeStrategy
+from bot.estrategias.TripleIndicatoStrategy import TripleIndicator
+from bot.logs.config_log import console
+from bot.parametros import BACKTEST_DAYS
+from db.duckdb_csv import load_csv_in_dataframe
+
 # Importando funções e classes relevantes do projeto
-
-
-# Estratégia cruzamento de médias móveis básica
-class SmaCross(Strategy):
-    # Parâmetros que podem ser otimizados
-    n1 = 10  # período da SMA rápida
-    n2 = 20  # período da SMA lenta
-
-    def init(self):
-        price = self.data.Close
-        self.ma1 = self.I(ta.SMA, price, self.n1)
-        self.ma2 = self.I(ta.SMA, price, self.n2)
-
-    def next(self):
-        if crossover(self.ma1, self.ma2):
-            self.buy()
-        elif crossover(self.ma2, self.ma1):
-            self.sell()
-
-
-# Estratégia baseada no seu sistema de daytrade
-class DaytradeStrategy(Strategy):
-    # Parâmetros que podem ser otimizados
-    ema_short = 10
-    ema_long = 20
-    rsi_period = 14
-    rsi_overbought = 70
-    rsi_oversold = 30
-
-    def init(self):
-        # Preços
-        self.close = self.data.Close
-        self.high = self.data.High
-        self.low = self.data.Low
-        self.volume = (
-            self.data.Volume if hasattr(self.data, 'Volume') else None
-        )
-
-        # EMAs
-        self.ema_fast = self.I(ta.EMA, self.close, self.ema_short)
-        self.ema_slow = self.I(ta.EMA, self.close, self.ema_long)
-        self.ema_200 = self.I(ta.EMA, self.close, 200)
-
-        # MACD
-        self.macd, self.macd_signal, _ = self.I(
-            ta.MACD, self.close, fastperiod=12, slowperiod=26, signalperiod=9
-        )
-
-        # RSI
-        self.rsi = self.I(ta.RSI, self.close, timeperiod=self.rsi_period)
-
-        # Bollinger Bands
-        self.bb_upper, self.bb_middle, self.bb_lower = self.I(
-            ta.BBANDS, self.close, timeperiod=20, nbdevup=2, nbdevdn=2
-        )
-
-    def next(self):
-        # Condições de compra
-        trend_up = self.ema_fast[-1] > self.ema_slow[-1]
-        macd_signal = crossover(self.macd, self.macd_signal)
-        rsi_oversold = self.rsi[-1] < self.rsi_oversold
-        price_above_ema200 = self.close[-1] > self.ema_200[-1]
-        price_near_bb_lower = self.close[-1] <= self.bb_lower[-1] * 1.01
-
-        # Condições de venda
-        trend_down = self.ema_fast[-1] < self.ema_slow[-1]
-        macd_signal_down = crossover(self.macd_signal, self.macd)
-        rsi_overbought = self.rsi[-1] > self.rsi_overbought
-        price_near_bb_upper = self.close[-1] >= self.bb_upper[-1] * 0.99
-
-        # Regras de entrada e saída
-        if not self.position:  # Se não temos posição
-            if (
-                trend_up
-                and macd_signal
-                and (rsi_oversold or price_near_bb_lower)
-                and price_above_ema200
-            ):
-                self.buy()
-        else:  # Se temos posição
-            if trend_down and (
-                macd_signal_down or rsi_overbought or price_near_bb_upper
-            ):
-                self.sell()
-
-            # Adicione uma lógica de stop loss
-            # (5% abaixo do preço de entrada por exemplo)
-            if (
-                self.position.is_long
-                and self.close[-1] < self.position.entry_price * 0.95
-            ):
-                self.position.close()
+install(show_locals=True)
 
 
 def run_backtest(data, strategy_class, **strategy_params):
     bt = Backtest(
         data,
         strategy_class,
-        cash=10000,
+        cash=10000000,
         commission=0.002,  # 0.2% por operação
         exclusive_orders=True,
         **strategy_params,
     )
 
     stats = bt.run()
-    print(f'Testando {strategy_class.__name__}')
-    print(f'Retorno Total: {stats["Return [%]"]:.2f}%')
-    print(f'Retorno Anualizado: {stats["Return (Ann.) [%]"]:.2f}%')
-    print(f'Máximo Drawdown: {stats["Max. Drawdown [%]"]:.2f}%')
-    print(f'Rácio de Sharpe: {stats["Sharpe Ratio"]:.2f}')
-    print(f'Número de Trades: {stats["# Trades"]}')
-    print(f'Win Rate: {stats["Win Rate [%]"]:.2f}%')
-    print(f'Profit Factor: {stats["Profit Factor"]:.2f}')
-    print('-' * 50)
+    console.print(f'Testando {strategy_class.__name__}')
+    console.print(f'Retorno Total: {stats["Return [%]"]:.2f}%')
+    console.print(f'Retorno Anualizado: {stats["Return (Ann.) [%]"]:.2f}%')
+    console.print(f'Máximo Drawdown: {stats["Max. Drawdown [%]"]:.2f}%')
+    console.print(f'Rácio de Sharpe: {stats["Sharpe Ratio"]:.2f}')
+    console.print(f'Número de Trades: {stats["# Trades"]}')
+    console.print(f'Win Rate: {stats["Win Rate [%]"]:.2f}%')
+    console.print(f'Profit Factor: {stats["Profit Factor"]:.2f}')
+    console.print('-' * 50)
 
     return bt, stats
 
 
 # Função para carregar dados históricos
-# (pode ser personalizada para seu dataset)
-def load_data(symbol='BTCBRL', timeframe='1d', csv_path=None):
-    if csv_path:
-        df = pd.read_csv(csv_path, parse_dates=True, index_col=0)
-    else:
-        # Se necessário importar da biblioteca backtesting:
-        from backtesting.test import GOOG  # noqa: PLC0415
-
-        return GOOG
+def load_data(csv_path=None):
+    end_date = datetime.now(timezone.utc)
+    start_date = end_date - timedelta(days=BACKTEST_DAYS)
+    df = load_csv_in_dataframe(
+        csv_path,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
     # Assegure-se de que os nomes das colunas estão no formato esperado
     column_map = {
@@ -151,46 +66,157 @@ def load_data(symbol='BTCBRL', timeframe='1d', csv_path=None):
     df = df.rename(
         columns={k: v for k, v in column_map.items() if k in df.columns}
     )
+
+    # Converter a coluna de timestamp para índice do tipo DateTimeIndex
+    if 'timestamp' in df.columns:
+        df.set_index('timestamp', inplace=True)
+        df.index = pd.to_datetime(df.index)
+
     return df
+
+
+def run_optimization(bt, strategy_class):
+    """Executa a otimização com tratamento de erros."""
+    try:
+        # Adapta os parâmetros conforme a estratégia utilizada
+        if strategy_class == TripleIndicator:
+            stats = optimize_triple_indicator(bt)
+        elif strategy_class == DaytradeStrategy:
+            stats = optimize_daytrade_strategy(bt)
+        else:
+            console.print(
+                f'[yellow]Estratégia {strategy_class.__name__} '
+                + 'não suporta otimização.[/yellow]'
+            )
+            return None
+
+        console.print('Parâmetros ótimos:', stats._strategy)
+        return stats
+    except (TypeError, ValueError, MemoryError) as e:
+        console.print(f'[bold red]Erro durante otimização: {e}[/bold red]')
+        console.print('Continuando sem otimização...')
+        return None
+
+
+def optimize_triple_indicator(bt):
+    """Otimiza os parâmetros para a estratégia TripleIndicator"""
+    return bt.optimize(
+        short_sma=range(5, 15, 5),
+        long_sma=range(20, 60, 20),
+        indicators_validation=[1, 2, 3, 4, 5, 6],
+        rsi_oversold=range(20, 40, 10),
+        rsi_overbought=range(60, 80, 10),
+        # Mantém fixos os parâmetros mais pesados para otimização
+        rsi=range(14, 20, 2),
+        macd_fastperiod=range(5, 15, 5),
+        macd_slowperiod=range(20, 30, 5),
+        macd_signalperiod=range(9, 15, 2),
+        stoch_k_period=range(3, 5, 1),
+        stoch_d_period=range(3, 5, 1),
+        stoch_slowk_period=range(3, 5, 1),
+        volume_sma_period=range(10, 30, 5),
+        atr_period=range(14, 20, 2),
+        maximize='Sharpe Ratio',
+        method='sambo',
+        max_tries=100,
+    )
+
+
+def optimize_daytrade_strategy(bt):
+    """Otimiza os parâmetros para a estratégia DaytradeStrategy"""
+    return bt.optimize(
+        ema_short=range(3, 10, 1),
+        ema_medium=range(8, 15, 1),
+        ema_long=range(15, 25, 5),
+        ema_trend=range(150, 250, 50),
+        rsi_period=range(10, 20, 2),
+        bb_period=range(15, 25, 5),
+        bb_std=range(2, 3, 1),
+        macd_fastperiod=range(8, 16, 2),
+        macd_slowperiod=range(20, 30, 5),
+        macd_signalperiod=range(7, 12, 1),
+        stoch_k_period=range(10, 20, 2),
+        stoch_slowk_period=range(3, 5, 1),
+        stoch_slowd_period=range(3, 5, 1),
+        volume_sma_period=range(15, 25, 5),
+        atr_period=range(10, 20, 2),
+        maximize='Sharpe Ratio',
+        method='sambo',
+        max_tries=100,
+    )
+
+
+def run_multiple_strategies(data):
+    """Executa o backtesting para diferentes
+    estratégias e compara os resultados"""
+    strategies = [DaytradeStrategy, TripleIndicator]
+
+    best_stats = None
+    best_bt = None
+    best_strategy = None
+    best_sharpe = -float('inf')
+
+    for strategy in strategies:
+        console.print(f'[bold blue]Testando {strategy.__name__}[/bold blue]')
+        bt, stats = run_backtest(data, strategy)
+
+        # Verificar se esta estratégia é melhor que a anterior
+        if stats['Sharpe Ratio'] > best_sharpe:
+            best_stats = stats
+            best_bt = bt
+            best_strategy = strategy
+            best_sharpe = stats['Sharpe Ratio']
+
+        # Salvar gráfico individual da estratégia
+        bt.plot(
+            filename=f'{strategy.__name__}.html',
+            open_browser=False,
+            resample='1h',
+        )
+
+        # Otimizar a estratégia
+        opt_stats = run_optimization(bt, strategy)
+        if opt_stats is not None:
+            bt.plot(
+                filename=f'{strategy.__name__}_Optimized.html',
+                open_browser=False,
+                resample='1h',
+            )
+            # Verificar se a versão otimizada é melhor
+            if opt_stats['Sharpe Ratio'] > best_sharpe:
+                best_stats = opt_stats
+                best_bt = bt
+                best_strategy = strategy
+                best_sharpe = opt_stats['Sharpe Ratio']
+
+    # Exibir a melhor estratégia encontrada
+    console.print(
+        f'[bold green]Melhor estratégia: {best_strategy.__name__}[/bold green]'
+    )
+    console.print(f'Sharpe Ratio: {best_sharpe:.2f}')
+    console.print(f'Retorno: {best_stats["Return [%]"]:.2f}%')
+
+    # Abrir o gráfico da melhor estratégia
+    best_bt.plot(open_browser=True)
+
+    return best_bt, best_stats, best_strategy
 
 
 if __name__ == '__main__':
     # Tente buscar seus dados primeiro
-    try:
-        data_path = (
-            Path(__file__).resolve().parent.parent.parent
-            / 'db'
-            / 'BTC_BRL_bitpreco.csv'
+    data_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / 'db'
+        / 'BTC_BRL_bitpreco.csv'
+    )
+    if data_path.exists():
+        data = load_data(csv_path=data_path)
+        console.print(f'Dados carregados: {len(data)} registros')
+
+        # Executar backtesting comparando múltiplas estratégias
+        best_bt, best_stats, best_strategy = run_multiple_strategies(data)
+    else:
+        console.print(
+            '[bold red]Arquivo de dados não'
+            + f' encontrado: {data_path}[/bold red]'
         )
-        if data_path.exists():
-            data = load_data(csv_path=data_path)
-        else:
-            # Use dados de exemplo caso não encontre seus dados
-            from backtesting.test import GOOG
-
-            data = GOOG
-    except Exception as e:
-        print(f'Erro ao carregar dados: {e}')
-        from backtesting.test import GOOG
-
-        data = GOOG
-
-    # Execute backtests para ambas as estratégias
-    bt1, stats1 = run_backtest(data, SmaCross)
-    bt1.plot(filename='SmaCross.html', open_browser=False)
-
-    bt2, stats2 = run_backtest(data, DaytradeStrategy)
-    bt2.plot(filename='DaytradeStrategy.html', open_browser=False)
-
-    # Otimização de parâmetros (opcional, descomente se quiser usar)
-    # stats = bt2.optimize(
-    #     ema_short=range(5, 20, 5),
-    #     ema_long=range(20, 100, 20),
-    #     rsi_period=[7, 14, 21],
-    #     rsi_oversold=range(20, 40, 5),
-    #     rsi_overbought=range(60, 85, 5),
-    #     maximize='Sharpe Ratio',
-    #     method='grid'
-    # )
-    # print("Parâmetros ótimos:", stats._strategy)
-    # bt2.plot(filename='DaytradeStrategy_Optimized.html', open_browser=False)

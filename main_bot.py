@@ -2,7 +2,7 @@ import signal
 import sys
 import threading
 import time
-from typing import Dict
+from typing import Dict, Type
 
 from rich.console import Group
 from rich.live import Live
@@ -16,7 +16,10 @@ from rich.progress import (
 )
 
 from bot.apis.api_bitpreco import Balance, ExecutedOrders, Ticker
-from bot.estrategias.daytrade import execute_trade as estrategia_daytrade
+from bot.estrategias.daytrade import DaytradeStrategy
+from bot.indicadores.calcular_indicadores import calculate_indicators
+from bot.indicadores.gerar_sinais_compra_venda import generate_signals
+from bot.indicadores.historico_precos import get_price_history
 from bot.logs.config_log import console
 from bot.models.coin_pair import CoinPair
 from bot.parametros import (
@@ -24,21 +27,28 @@ from bot.parametros import (
     NUMERO_MAXIMO_TENTATIVAS,
     THREAD_LOCK,
 )
+from bot.validador_trade import validate_trade_conditions
 from compartilhado import get_coinpairs, get_interval
+from db.duckdb_csv import save_to_csv_duckdb
 from db.json_csv import (
     save_balance_to_csv,
     save_orders_to_csv,
     save_price_to_csv,
 )
+from segredos import CAMINHO
 
 
 class TradingBot:
-    def __init__(self):
+    def __init__(
+        self, strategy_class: Type[DaytradeStrategy] = DaytradeStrategy
+    ):
         self._stop_event = threading.Event()
         self.thread_lock = threading.Lock()
         self.threads = []
         self.progress_bars: Dict[str, Progress] = {}
         self.tasks: Dict[str, int] = {}
+        self.strategy_class = strategy_class
+        self.strategy = strategy_class()
 
     def create_progress_group(self):
         """Cria grupo de barras de progresso para cada par de moedas"""
@@ -63,7 +73,7 @@ class TradingBot:
         return Group(*progress_group)
 
     @classmethod
-    def retry_on_connection_error(self, func):
+    def retry_on_connection_error(cls, func):
         def wrapper(*args, **kwargs):
             for attempt in range(NUMERO_MAXIMO_TENTATIVAS):
                 try:
@@ -82,33 +92,136 @@ class TradingBot:
 
         return wrapper
 
-    def execute_trading_cycle(self, coinpair: CoinPair) -> None:
+    def execute_trading_cycle(self, coinpair: CoinPair) -> None:  # noqa: PLR0914
+        """
+        Executa um ciclo completo de negociação:
+        1. Obtém dados de mercado (ticker, saldo, ordens)
+        2. Valida condições para operar
+        3. Obtém histórico de preços e calcula indicadores
+        4. Gera sinais de compra/venda
+        5. Executa operações com base nos sinais
+        """
         progress = self.progress_bars[coinpair.bitpreco_format]
         task = self.tasks[coinpair.bitpreco_format]
 
         try:
+            # 1. Obter dados de mercado
             ticker_json = Ticker(coinpair).json()
             save_price_to_csv(ticker_json)
-            progress.update(task, advance=10, description='Ticker atualizado')
+            progress.update(
+                task,
+                description=f'Preço atual: {ticker_json["last"]}',
+                advance=10,
+            )
 
             balance = Balance().json()
             save_balance_to_csv(balance)
-            progress.update(task, advance=10, description='Saldo atualizado')
+            progress.update(task, description='Saldo atualizado', advance=10)
 
             executed_orders = ExecutedOrders(coinpair.bitpreco_format).json()
             save_orders_to_csv(executed_orders, coinpair)
-            progress.update(task, advance=10, description='Ordens atualizadas')
+            progress.update(task, description='Ordens atualizadas', advance=10)
 
-            estrategia_daytrade(
-                progress, task, coinpair, ticker_json, balance, executed_orders
+            # 2. Validar condições para trade
+            current_price = float(ticker_json['last'])
+            if not validate_trade_conditions(
+                current_price, balance, executed_orders
+            ):
+                return
+            progress.update(
+                task,
+                description='Condições de trade validadas',
+                advance=10,
             )
-            progress.update(task, advance=30, description='Trade executado')
+
+            # 3. Obter histórico e calcular indicadores
+            df = get_price_history(progress, task, coin_pair=coinpair)
+            progress.update(
+                task,
+                description='Histórico de preços carregado',
+                advance=10,
+            )
+            if df is None or df.empty:
+                console.print('Dados históricos não disponíveis')
+                return
+
+            df = calculate_indicators(df)
+            progress.update(
+                task,
+                description='Indicadores calculados',
+                advance=10,
+            )
+
+            # 4. Gerar sinais de compra/venda
+            df = generate_signals(df)
+            progress.update(
+                task,
+                description='Sinais de compra e venda gerados',
+                advance=10,
+            )
+
+            # 5. Analisar mercado e executar operações
+            _signal, trend, risk_factor = (
+                self.strategy.analyze_signals_from_dataframe(df)
+            )
+
+            console.clear()
+            console.log(
+                ':chart_with_upwards_trend: [bold cyan]'
+                + f'Tendência atual:[/bold cyan] {trend}, '
+                f'[bold cyan]Fator de risco:[/bold cyan] {risk_factor}'
+            )
+
+            adjusted_risk = self.strategy.adjust_risk(risk_factor)
+            last_positon = df['position'].iloc[-1]
+            last_signal = df['signal'].iloc[-1]
+            last_price = ticker_json['last']
+
+            brl_balance = balance.get('BRL', 0)
+            btc_balance = balance.get('BTC', 0)
+
+            # Executa compra se tiver saldo e houver sinal de compra
+            if brl_balance > 0 and last_positon == 0 and last_signal == 1:
+                self.strategy.execute_buy(
+                    executed_orders,
+                    brl_balance,
+                    adjusted_risk,
+                    last_price,
+                    coinpair,
+                )
+                df.iloc[-1, df.columns.get_loc('position')] = 1
+            # Executa venda se tiver moeda e houver sinal de venda
+            elif btc_balance > 0 and last_positon == 1 and last_signal == -1:
+                self.strategy.execute_sell(
+                    executed_orders,
+                    coinpair,
+                    btc_balance,
+                    adjusted_risk,
+                    last_price,
+                )
+                df.iloc[-1, df.columns.get_loc('position')] = 0
+            else:
+                console.print(
+                    ':hourglass: [bold yellow]Nenhuma ação necessária '
+                    + 'no momento.[/bold yellow]'
+                )
+
+            # Salvar os dados com indicadores e sinais
+            save_to_csv_duckdb(
+                df,
+                CAMINHO
+                + f'/{coinpair.bitpreco_websocket}_{coinpair.exchange.value}'
+                + '.csv',
+                mode='append',
+            )
+            progress.update(task, description='Ciclo completo', advance=30)
 
         except Exception as e:
             progress.update(task, description=f'[red]Erro: {str(e)}[/red]')
             raise
 
     def trader_loop(self, coinpair: CoinPair):
+        """Loop principal de trading para cada par de moedas"""
         while not self._stop_event.is_set():
             try:
                 if THREAD_LOCK:
@@ -144,6 +257,7 @@ class TradingBot:
                     time.sleep(INTERVALO_TENTATIVAS)
 
     def start(self):
+        """Inicia o bot de trading"""
         self._stop_event.clear()
         progress_group = self.create_progress_group()
 
@@ -152,7 +266,7 @@ class TradingBot:
             refresh_per_second=4,
             console=console,
             transient=False,
-            vertical_overflow="crop",
+            vertical_overflow='crop',
         ) as live:
             self.live = live
             for coinpair in get_coinpairs():
@@ -169,12 +283,14 @@ class TradingBot:
                 time.sleep(0.1)
 
     def stop(self):
+        """Para o bot de trading"""
         self._stop_event.set()
         for thread in self.threads:
             thread.join(timeout=5.0)
         console.print('[bold green]Bot encerrado com sucesso![/bold green]')
 
     def signal_handler(self, signum, frame):
+        """Manipulador de sinais para encerramento gracioso"""
         console.print(
             ':rotating_light: [bold magenta]Iniciando'
             + ' encerramento gracioso...[/bold magenta]'
@@ -183,7 +299,7 @@ class TradingBot:
 
 
 def main():
-    bot = TradingBot()
+    bot = TradingBot(strategy_class=DaytradeStrategy)
     signal.signal(signal.SIGINT, bot.signal_handler)
 
     try:

@@ -16,10 +16,9 @@ from dashboard import app
 from dashboard.componentes_personalizados import (
     bar_precos_atuais,
 )
-from dashboard.graph_preco_tab import div_graph_preco
+from dashboard.graph_preco_tab import chart_editor
 
 # from crypto.timescaledb import read_from_db
-
 
 dmc.add_figure_templates()
 
@@ -670,32 +669,32 @@ def hello_world():
 )
 
 # Gráficos de Linha, Candlestick e Pizza
-graficos = dmc.Card(
-    children=[
-        dmc.CardSection(
-            [
-                dmc.Text('Gráficos', size='lg', fw=700),
-            ],
-            withBorder=True,
-            inheritPadding=True,
-            py='xs',
-        ),
-        dmc.CardSection(
-            children=[
-                dmc.ScrollArea(
-                    h=400,
-                    children=[
-                        div_graph_preco,
-                    ],
-                ),
-            ],
-        ),
-    ],
-    withBorder=True,
-    shadow='xl',
-    radius='md',
-    h=450,
-)
+# graficos = dmc.Card(
+#     children=[
+#         dmc.CardSection(
+#             [
+#                 dmc.Text('Gráficos', size='lg', fw=700),
+#             ],
+#             withBorder=True,
+#             inheritPadding=True,
+#             py='xs',
+#         ),
+#         dmc.CardSection(
+#             children=[
+#                 dmc.ScrollArea(
+#                     h=400,
+#                     children=[
+#                         div_graph_preco,
+#                     ],
+#                 ),
+#             ],
+#         ),
+#     ],
+#     withBorder=True,
+#     shadow='xl',
+#     radius='md',
+#     h=450,
+# )
 
 # Painel lateral para alertas personalizados e indicadores
 painel_alertas = dmc.Card(
@@ -844,7 +843,8 @@ layout_dashboard = html.Div(
         dcc.Store(id='df-balance', storage_type='local'),
         dmc.Grid(
             [
-                dmc.GridCol(graficos, span=8),
+                # dmc.GridCol(graficos, span=8),
+                dmc.GridCol(chart_editor, span=8),
                 dmc.GridCol(historico_precos, span=4),
                 dmc.GridCol(painel_alertas, span=3),
                 dmc.GridCol(controle_tempo, span=3),
