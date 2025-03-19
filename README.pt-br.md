@@ -75,8 +75,8 @@ O projeto está em desenvolvimento contínuo, e as próximas atualizações foca
 
 1. Clone o repositório:
    ```sh
-   git clone https://github.com/seu-usuario/crypto-trading-bot.git
-   cd crypto-trading-bot
+   git clone https://github.com/joaosnet/crypto.git
+   cd crypto
    ```
 2. Instale o `uv` no seu computador https://github.com/astral-sh/uv
 3. Instale as dependências:
