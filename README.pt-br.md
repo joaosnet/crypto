@@ -36,6 +36,82 @@ Desenvolver um bot de trading algorítmico modular que:
 2. Utilize indicadores técnicos para tomar decisões de compra e venda.
 3. Implemente estratégias de Aprendizado por Reforço para otimizar essas decisões.
 
+### Estrutura do Projeto
+
+```
+├── .env -> Configuração de variáveis de ambiente
+├── .gitattributes -> Configuração do Git
+├── .gitignore -> config para ignorar arquivos e pastas no repositório
+├── .vscode
+    └── settings.json -> Configurações do Visual Studio Code
+├── README.md -> Documentação do projeto em inglês
+├── README.pt-br.md -> Documentação do projeto em português
+├── bot -> Código do bot de trading
+    ├── __init__.py -> Inicialização do módulo
+    ├── analizador_de_mercado.py -> Análise de mercado
+    ├── apis -> Código de integração com APIs
+    │   ├── __init__.py
+    │   ├── api_binance.py -> Código de integração com a Binance
+    │   ├── api_bitpreco.py -> Código de integração com a Bitypreço
+    │   └── api_bitpreco_websockets.py 
+    ├── crypto_sim_rich.py -> Código que falta adaptar
+    ├── estrategias
+    │   ├── TripleIndicatoStrategy.py
+    │   ├── arbitragem.py
+    │   └── daytrade.py
+    ├── indicadores
+    │   ├── __init__.py
+    │   ├── calcular_indicadores.py
+    │   ├── gerar_sinais_compra_venda.py
+    │   └── historico_precos.py
+    ├── logs
+    │   └── config_log.py
+    ├── models
+    │   ├── coin_pair.py
+    │   └── models.py
+    ├── parametros.py
+    ├── tests
+    │   └── backtestRunner.py
+    └── validador_trade.py
+├── compartilhado.py
+├── dashboard --> Código do dashboard
+    ├── __init__.py
+    ├── assets
+    │   └── fotos_site
+    │   │   └── logo.png
+    ├── callbacks.py
+    ├── componentes_personalizados.py
+    ├── custom_chart_editor.py
+    ├── dash_utils.py
+    ├── graph_preco_tab.py
+    ├── routers.py
+    └── views.py
+├── db
+    ├── coinpair.json
+    ├── duckdb_csv.py
+    ├── interval.json
+    ├── json_csv.py
+    └── timescaledb.py
+├── examples
+    ├── change_datasets.py
+    ├── customize.py
+    ├── default_figure.py
+    ├── display_dce_figure_code.py
+    ├── display_dce_figure_in_dccGraph.py
+    ├── figure_templates.py
+    ├── figure_templates_dbc.py
+    ├── pattern_match_demo.py
+    └── quickstart.py
+├── main.py
+├── main_bot.py
+├── pyproject.toml
+├── scripts
+    ├── kill_process.py
+    └── process_manager.py
+├── segredos.py
+└── uv.lock
+```
+
 ### Específicos
 
 - **Coleta de Dados**: O bot captura continuamente dados de mercado, como preços, volumes e outros indicadores técnicos, da API da Bitypreço.
