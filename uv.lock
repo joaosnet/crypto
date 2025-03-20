@@ -1,4 +1,5 @@
 version = 1
+revision = 1
 requires-python = "==3.12.8"
 
 [[package]]
@@ -571,13 +572,13 @@ requires-dist = [
     { name = "antlr4-python3-runtime", specifier = "==4.11" },
     { name = "array-to-latex", specifier = ">=0.92" },
     { name = "backtesting", specifier = ">=0.6.2" },
-    { name = "dash", extras = ["celery", "diskcache"], specifier = ">=2.18.2" },
+    { name = "dash", extras = ["celery", "diskcache"], specifier = "==3.0.0" },
     { name = "dash-bootstrap-components", specifier = ">=1.7.1" },
     { name = "dash-bootstrap-templates", specifier = ">=1.3.0" },
     { name = "dash-chart-editor", specifier = ">=0.0.1a5" },
     { name = "dash-dangerously-set-inner-html", specifier = ">=0.0.2" },
     { name = "dash-iconify", specifier = ">=0.1.2" },
-    { name = "dash-mantine-components", specifier = "==0.15.1" },
+    { name = "dash-mantine-components", specifier = "==1.0.0" },
     { name = "dash-resizable-panels", specifier = ">=0.1.0" },
     { name = "diskcache", specifier = ">=5.6.3" },
     { name = "duckdb", specifier = ">=1.1.3" },
@@ -621,12 +622,9 @@ wheels = [
 
 [[package]]
 name = "dash"
-version = "2.18.2"
+version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "dash-core-components" },
-    { name = "dash-html-components" },
-    { name = "dash-table" },
     { name = "flask" },
     { name = "importlib-metadata" },
     { name = "nest-asyncio" },
@@ -634,12 +632,13 @@ dependencies = [
     { name = "requests" },
     { name = "retrying" },
     { name = "setuptools" },
+    { name = "stringcase" },
     { name = "typing-extensions" },
     { name = "werkzeug" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/cf/ae/dfd8c42c83cad1b903e4e3e7be7042074d5d7d16be97eaede6656b8ead95/dash-2.18.2.tar.gz", hash = "sha256:20e8404f73d0fe88ce2eae33c25bbc513cbe52f30d23a401fa5f24dbb44296c8", size = 7457235 }
+sdist = { url = "https://files.pythonhosted.org/packages/52/9c/2a9f90b55fd9a5e27b89f20c8b52e05db52c49bb99213c0323b9116dbe9f/dash-3.0.0.tar.gz", hash = "sha256:2cbb071836b3ca546dbe38655083908b8be543f3bea9c4bf660b96490d3d4953", size = 7608640 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/72/ef/d46131f4817f18b329e4fb7c53ba1d31774239d91266a74bccdc932708cc/dash-2.18.2-py3-none-any.whl", hash = "sha256:0ce0479d1bc958e934630e2de7023b8a4558f23ce1f9f5a4b34b65eb3903a869", size = 7792658 },
+    { url = "https://files.pythonhosted.org/packages/0e/b1/4538ba05deedd430167bbee3ee1589276994e4a85c9e4d52f467080ecc33/dash-3.0.0-py3-none-any.whl", hash = "sha256:684de3765bdb24f2c5a7b5d9d4dffb02bb122586b08784a394769004af444f03", size = 7951998 },
 ]
 
 [package.optional-dependencies]
@@ -689,28 +688,10 @@ wheels = [
 ]
 
 [[package]]
-name = "dash-core-components"
-version = "2.0.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/41/55/ad4a2cf9b7d4134779bd8d3a7e5b5f8cc757f421809e07c3e73bb374fdd7/dash_core_components-2.0.0.tar.gz", hash = "sha256:c6733874af975e552f95a1398a16c2ee7df14ce43fa60bb3718a3c6e0b63ffee", size = 3427 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/00/9e/a29f726e84e531a36d56cff187e61d8c96d2cc253c5bcef9a7695acb7e6a/dash_core_components-2.0.0-py3-none-any.whl", hash = "sha256:52b8e8cce13b18d0802ee3acbc5e888cb1248a04968f962d63d070400af2e346", size = 3822 },
-]
-
-[[package]]
 name = "dash-dangerously-set-inner-html"
 version = "0.0.2"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/56/b1/5102060b9b6836409db84265f4f934475c2707cce87e75f3f8a04493e0dc/dash_dangerously_set_inner_html-0.0.2.tar.gz", hash = "sha256:d7fe990755851fc4d2e22c8f10b7aea055cabf380bbceefba589779b269fea64", size = 4956 }
-
-[[package]]
-name = "dash-html-components"
-version = "2.0.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/14/c6/957d5e83b620473eb3c8557a253fb01c6a817b10ca43d3ff9d31796f32a6/dash_html_components-2.0.0.tar.gz", hash = "sha256:8703a601080f02619a6390998e0b3da4a5daabe97a1fd7a9cebc09d015f26e50", size = 3840 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/75/65/1b16b853844ef59b2742a7de74a598f376ac0ab581f0dcc34db294e5c90e/dash_html_components-2.0.0-py3-none-any.whl", hash = "sha256:b42cc903713c9706af03b3f2548bda4be7307a7cf89b7d6eae3da872717d1b63", size = 4092 },
-]
 
 [[package]]
 name = "dash-iconify"
@@ -723,14 +704,14 @@ wheels = [
 
 [[package]]
 name = "dash-mantine-components"
-version = "0.15.1"
+version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dash" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e9/83/0f687d8e96c020875a0bbf69757675b3b02c0087b813b3a1298cc54eb8e2/dash_mantine_components-0.15.1.tar.gz", hash = "sha256:bb24153af09ccc42972af397101ee62718ebe2bbf29fa7ed33c02997059352bd", size = 916594 }
+sdist = { url = "https://files.pythonhosted.org/packages/df/cc/be521da3df2c240fded8eca8cea21e9cd183a2eed33272177d7754a32908/dash_mantine_components-1.0.0.tar.gz", hash = "sha256:b0e381f65bde63b43d2fa9da37279431fc9a6c0d0713aa0232c7c7e00a8ea088", size = 1446610 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6e/b5/984de836c4a5e24c29e18b00f51fcdb44f77025221ecd0d7da28ff34532f/dash_mantine_components-0.15.1-py3-none-any.whl", hash = "sha256:974792e1973144b56d286a50ca55bdfc5d601c174dd7cc4641a1d4bcd81e339e", size = 1224192 },
+    { url = "https://files.pythonhosted.org/packages/bb/26/9d1c19fe8b58ed2cd206e800f22352713f50f8eb239b1c418e39494cf520/dash_mantine_components-1.0.0-py3-none-any.whl", hash = "sha256:e5c1fb32db24ece57727275723e9642a6e5dd616a09f22a569f4bc1618a826c4", size = 1794022 },
 ]
 
 [[package]]
@@ -740,15 +721,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f0/ca/028f85bcb268db70828c9fb2752759af88a724ea856e02b4dbef639b6bce/dash_resizable_panels-0.1.0.tar.gz", hash = "sha256:e93243052168e8ba21fe09e5ffd7a0366de21aeab694122e2365ef156e2f8a57", size = 46700 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a0/73/dc150294a694b947ed93918d3c8b5101ba945617bc4a2a4ef465a25bf20d/dash_resizable_panels-0.1.0-py3-none-any.whl", hash = "sha256:d13a2ab809415c132266698bc4f0f22221f2202fa2c37bd1b6fce7158f334636", size = 48588 },
-]
-
-[[package]]
-name = "dash-table"
-version = "5.0.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/3a/81/34983fa0c67125d7fff9d55e5d1a065127bde7ca49ca32d04dedd55f9f35/dash_table-5.0.0.tar.gz", hash = "sha256:18624d693d4c8ef2ddec99a6f167593437a7ea0bf153aa20f318c170c5bc7308", size = 3391 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/da/ce/43f77dc8e7bbad02a9f88d07bf794eaf68359df756a28bb9f2f78e255bb1/dash_table-5.0.0-py3-none-any.whl", hash = "sha256:19036fa352bb1c11baf38068ec62d172f0515f73ca3276c79dee49b95ddc16c9", size = 3912 },
 ]
 
 [[package]]
@@ -2040,8 +2012,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/39/1b/d0b013bf7d1af7cf0a6a4fce13f5fe5813ab225313755367b36e714a63f8/pycryptodome-3.21.0-cp36-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:18caa8cfbc676eaaf28613637a89980ad2fd96e00c564135bf90bc3f0b34dd93", size = 2254397 },
     { url = "https://files.pythonhosted.org/packages/14/71/4cbd3870d3e926c34706f705d6793159ac49d9a213e3ababcdade5864663/pycryptodome-3.21.0-cp36-abi3-win32.whl", hash = "sha256:280b67d20e33bb63171d55b1067f61fbd932e0b1ad976b3a184303a3dad22764", size = 1775641 },
     { url = "https://files.pythonhosted.org/packages/43/1d/81d59d228381576b92ecede5cd7239762c14001a828bdba30d64896e9778/pycryptodome-3.21.0-cp36-abi3-win_amd64.whl", hash = "sha256:b7aa25fc0baa5b1d95b7633af4f5f1838467f1815442b22487426f94e0d66c53", size = 1812863 },
-    { url = "https://files.pythonhosted.org/packages/25/b3/09ff7072e6d96c9939c24cf51d3c389d7c345bf675420355c22402f71b68/pycryptodome-3.21.0-pp27-pypy_73-manylinux2010_x86_64.whl", hash = "sha256:2cb635b67011bc147c257e61ce864879ffe6d03342dc74b6045059dfbdedafca", size = 1691593 },
-    { url = "https://files.pythonhosted.org/packages/a8/91/38e43628148f68ba9b68dedbc323cf409e537fd11264031961fd7c744034/pycryptodome-3.21.0-pp27-pypy_73-win32.whl", hash = "sha256:4c26a2f0dc15f81ea3afa3b0c87b87e501f235d332b7f27e2225ecb80c0b1cdd", size = 1765997 },
 ]
 
 [[package]]
@@ -2581,6 +2551,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/28/e3/55dcc2cfbc3ca9c29
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/7b/ce1eafaf1a76852e2ec9b22edecf1daa58175c090266e9f6c64afcd81d91/stack_data-0.6.3-py3-none-any.whl", hash = "sha256:d5558e0c25a4cb0853cddad3d77da9891a08cb85dd9f9f91b9f8cd66e511e695", size = 24521 },
 ]
+
+[[package]]
+name = "stringcase"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f3/1f/1241aa3d66e8dc1612427b17885f5fcd9c9ee3079fc0d28e9a3aeeb36fa3/stringcase-1.2.0.tar.gz", hash = "sha256:48a06980661908efe8d9d34eab2b6c13aefa2163b3ced26972902e3bdfd87008", size = 2958 }
 
 [[package]]
 name = "sympy"

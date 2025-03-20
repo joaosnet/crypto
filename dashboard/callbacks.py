@@ -91,7 +91,20 @@ def update_df_precos(_):
     Input('interval-component-dash', 'n_intervals'),
 )
 def update_df_executed_orders(n_intervals):
-    executed_orders_df = pd.read_csv(ORDERS_FILE)
+    # dada os coinpars pegar o executed_orders_coinpair.csv
+    # e criar um dataframe
+    coinpairs = get_str_coinpairs()
+    executed_orders_df = pd.DataFrame()
+    for coinpair in coinpairs:
+        executed_order_df = pd.read_csv(
+            CAMINHO + f'/executed_orders_{coinpair}.csv'
+        )
+        # Adicionando uma coluna com o nome do coinpair
+        # Concatenando os dataframes
+        executed_orders_df = pd.concat(
+            [executed_orders_df, executed_order_df], ignore_index=True
+        )
+
     return executed_orders_df.to_dict('records')
 
 
@@ -560,11 +573,13 @@ def ordens_tab(executed_orders_df, balance_df, df_precos):
                     ),
                 ],
             ),
-            dmc.CardSection(table,
+            dmc.CardSection(
+                table,
                 withBorder=True,
                 inheritPadding=True,
                 mt='sm',
-                pb='md',),
+                pb='md',
+            ),
         ]
     except Exception:
         return [

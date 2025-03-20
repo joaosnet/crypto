@@ -51,4 +51,4 @@ def send_fig_to_dcc(figure):
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True)
+    app.run(debug=True)

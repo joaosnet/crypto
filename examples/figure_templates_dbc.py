@@ -57,7 +57,7 @@ dropdown = dcc.Dropdown(
 
 
 app = Dash(
-    __name__, external_scripts=['https://cdn.plot.ly/plotly-2.18.2.min.js']
+    __name__
 )
 
 df = px.data.gapminder()
@@ -109,4 +109,4 @@ def setTemplate(v, figure):
 
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run(debug=True)

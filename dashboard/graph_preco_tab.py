@@ -1,109 +1,17 @@
-# Importando as bibliotecas necessárias
 import datetime
 
-import dash_mantine_components as dmc
 import pandas as pd
 import plotly.graph_objects as go
-from dash import Input, Output, State, dcc, html
-from dash_iconify import DashIconify
-from plotly import express as px
+from dash import Input, Output, State, no_update
 from plotly.subplots import make_subplots
 from rich.console import Console
 
-from bot.apis.api_binance import get_klines
 from dashboard import app
 from dashboard.custom_chart_editor import ChartEditor
 from db.duckdb_csv import load_csv_in_dataframe
 from segredos import CAMINHO
 
 console = Console()
-
-# Definindo a coluna esquerda
-div_graph_preco = html.Div(
-    id='left-column',
-    # className="eight columns",
-    children=[
-        # store para armazenar o estado do df de preços quando for atualizado
-        dcc.Interval(
-            id='interval-component',
-            interval=1 * 1000,  # in milliseconds
-            n_intervals=0,
-        ),
-        dcc.Interval(
-            id='interval-component-dash',
-            interval=1 * 1000,  # in milliseconds
-            n_intervals=0,
-        ),
-        dmc.Tabs(
-            id='tabs',
-            value='Preços',
-            children=[
-                dmc.TabsList(
-                    justify='space-around',
-                    grow=True,
-                    children=[
-                        dmc.TabsTab(
-                            'Preços',
-                            value='Preços',
-                            leftSection=DashIconify(
-                                id='preco-icon', icon='cryptocurrency:btc'
-                            ),
-                        ),
-                        dmc.TabsTab(
-                            'editor',
-                            value='editor',
-                            leftSection=DashIconify(
-                                id='editor-icon', icon='mdi:chart-line'
-                            ),
-                            rightSection=DashIconify(
-                                id='editor-icon', icon='mdi:chart-line'
-                            ),
-                        ),
-                    ],
-                ),
-                # tabs panel below
-                dmc.TabsPanel(
-                    dmc.Stack(
-                        gap=0,
-                        children=[
-                            dcc.Graph(
-                                id='grafico-preco',
-                                config={'displayModeBar': False},
-                            ),
-                        ],
-                    ),
-                    value='Preços',
-                    id='tab-precos',
-                ),
-                dmc.TabsPanel(
-                    dmc.ScrollArea(
-                        h=250,
-                        w=250,
-                        id='tab-editor',
-                        children=[
-                            dmc.Stack(
-                                gap=0,
-                                children=[
-                                    dmc.Skeleton(h=50, mb='xl'),
-                                    dmc.Skeleton(h=8, radius='xl'),
-                                    dmc.Skeleton(h=8, my=6),
-                                    dmc.Skeleton(h=8, w='70%', radius='xl'),
-                                ],
-                            ),
-                        ],
-                    ),
-                    value='editor',
-                    # id='tab-editor',
-                ),
-            ],
-        ),
-    ],
-)
-
-
-# Inicializar o ChartEditor globalmente
-# Será configurado completamente no callback
-chart_editor = None
 
 
 # Função para calcular indicadores básicos se não estiverem presentes
@@ -437,7 +345,7 @@ def create_price_figure(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                 )
 
             if 'volume' in indicadores:
-                # For volume, we'll use either volume_sma 
+                # For volume, we'll use either volume_sma
                 # if available or just volume
                 volume_col = (
                     'volume_sma'
@@ -506,12 +414,14 @@ def create_price_figure(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
 
                 # Verificar e corrigir problemas com a coluna timestamp
                 if 'timestamp' in df_ticker.columns:
-                    # Converter timestamp para datetime, manejando formatos mistos
+                    # Converter timestamp para datetime,
+                    # manejando formatos mistos
                     df_ticker['timestamp'] = pd.to_datetime(
                         df_ticker['timestamp'], format='mixed', errors='coerce'
                     )
 
-                    # Filtrar apenas registros válidos e dentro do intervalo de tempo
+                    # Filtrar apenas registros válidos
+                    # e dentro do intervalo de tempo
                     valid_timestamps = df_ticker['timestamp'].notna()
                     df_ticker = df_ticker[valid_timestamps]
 
@@ -531,7 +441,8 @@ def create_price_figure(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                             'timestamp'
                         ].dt.tz_localize('America/Sao_Paulo', ambiguous='NaT')
 
-                    # Filtrar por intervalo de tempo e verificar se há dados válidos
+                    # Filtrar por intervalo de tempo
+                    # e verificar se há dados válidos
                     df_ticker = df_ticker[
                         (df_ticker['timestamp'] >= minutes_ago)
                         & (df_ticker['timestamp'] <= now)
@@ -567,7 +478,8 @@ def create_price_figure(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                 orders_df = pd.DataFrame(executed_orders_df)
 
                 if 'time_stamp' in orders_df.columns:
-                    # Converter timestamp para datetime, manejando formatos mistos
+                    # Converter timestamp para datetime,
+                    # manejando formatos mistos
                     orders_df['time_stamp'] = pd.to_datetime(
                         orders_df['time_stamp'],
                         format='mixed',
@@ -582,7 +494,7 @@ def create_price_figure(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
                         orders_df['time_stamp'] = orders_df[
                             'time_stamp'
                         ].dt.tz_localize('America/Sao_Paulo', ambiguous='NaT')
-                    except:
+                    except Exception:
                         # Se falhar, tentar converter para apenas data e hora
                         orders_df['time_stamp'] = pd.to_datetime(
                             orders_df['time_stamp'].dt.strftime(
@@ -645,7 +557,9 @@ def create_price_figure(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917
 
 
 # Função para atualizar dados para o ChartEditor
-def update_chart_data(start_date=None, end_date=None):
+def update_chart_data(
+    start_date=None, end_date=None, graf_info=None, indicadores=None
+):
     try:
         # Se nenhuma data for fornecida, use os últimos 30 minutos
         if start_date is None or end_date is None:
@@ -655,6 +569,13 @@ def update_chart_data(start_date=None, end_date=None):
         # Converter para timezone correta
         start_date = pd.to_datetime(start_date)
         end_date = pd.to_datetime(end_date)
+
+        # Usar valores padrão se os parâmetros estiverem vazios
+        if graf_info is None:
+            graf_info = ['bity_candlestick', 'ticker', 'orders']
+
+        if indicadores is None:
+            indicadores = ['sinais', 'ema_20', 'ema_200']
 
         # Carregar dados
         df_bity = load_csv_in_dataframe(
@@ -669,38 +590,87 @@ def update_chart_data(start_date=None, end_date=None):
         # Adicionar indicadores faltantes
         df_bity = add_missing_indicators(df_bity)
 
-        # Criar figura base com indicadores padrão
-        figure = create_price_figure(
+        # Criar figuras com base nos indicadores e graf_info selecionados
+        figure1 = create_price_figure(
             df_bity=df_bity,
             minutes_ago=start_date,
             now=end_date,
-            graf_info=['bity_candlestick'],
-            indicadores=['ema_20', 'ema_200', 'sinais'],
+            graf_info=graf_info,
+            indicadores=['ema_20', 'ema_200']
+            + [i for i in indicadores if i in {'sinais'}],
         )
 
-        # Criar uma segunda figura com diferentes indicadores
-        figure2 = create_price_figure(
-            df_bity=df_bity,
-            minutes_ago=start_date,
-            now=end_date,
-            graf_info=['bity_candlestick'],
-            indicadores=['volume', 'sinais'],
-        )
+        # Segunda figura com foco em volume se estiver selecionado
+        volume_indicadores = [
+            i for i in indicadores if i in {'volume', 'sinais'}
+        ]
+        if 'volume' in indicadores:
+            figure2 = create_price_figure(
+                df_bity=df_bity,
+                minutes_ago=start_date,
+                now=end_date,
+                graf_info=graf_info,
+                indicadores=volume_indicadores,
+            )
+        else:
+            # Se volume não estiver selecionado, mostrar emas
+            figure2 = create_price_figure(
+                df_bity=df_bity,
+                minutes_ago=start_date,
+                now=end_date,
+                graf_info=graf_info,
+                indicadores=['ema_5', 'ema_10', 'ema_20', 'ema_200']
+                + [i for i in indicadores if i in {'sinais'}],
+            )
 
-        # Criar figura com volume
-        figure3 = create_price_figure(
-            df_bity=df_bity,
-            minutes_ago=start_date,
-            now=end_date,
-            graf_info=['bity_candlestick'],
-            indicadores=['volume', 'sinais'],
-        )
+        # Terceira figura com indicadores técnicos selecionados
+        tech_indicadores = [
+            i for i in indicadores if i in {'rsi', 'macd', 'bbands', 'stoch'}
+        ]
+        if tech_indicadores:
+            figure3 = create_price_figure(
+                df_bity=df_bity,
+                minutes_ago=start_date,
+                now=end_date,
+                graf_info=graf_info,
+                indicadores=tech_indicadores
+                + [i for i in indicadores if i in {'sinais'}],
+            )
+        else:
+            figure3 = create_price_figure(
+                df_bity=df_bity,
+                minutes_ago=start_date,
+                now=end_date,
+                graf_info=graf_info,
+                indicadores=['sinais'],
+            )
 
-        return df_bity, [figure, figure2, figure3]
+        # Retorna o dataframe e as figuras para atualização do ChartEditor
+        return df_bity, [figure1, figure2, figure3]
 
-    except Exception as e:
+    except Exception:
         console.print_exception(show_locals=True)
         return None, None
+
+
+# Inicializar o ChartEditor com configurações para atualização automática
+editor = ChartEditor(
+    app,
+    instance_id='principal',  # ID de instância único para primeira página
+    card_size=1500,
+    initial_cards=3,  # Iniciar com três gráficos padrão
+    update_interval_id='interval-component-dash',
+    data_update_function=update_chart_data,
+    default_title='Criptomoeda Chart',
+    figure_titles=[
+        'Preço BTC-BRL com EMAs',
+        'Volume BTC-BRL',
+        'Indicadores Técnicos',
+    ],
+)
+
+# Inicializar o ChartEditor globalmente
+chart_editor = editor.get_layout()
 
 
 # Callback para adicionar o conteúdo da página dentro do tab Preços
@@ -716,7 +686,7 @@ def update_chart_data(start_date=None, end_date=None):
     Input('tabs', 'value'),
     prevent_initial_call=True,
 )
-def preco_tab(
+def preco_tab(  # noqa: PLR0913, PLR0917
     n_intervals,
     data_recency,
     data_recency_candlestick,
@@ -734,6 +704,9 @@ def preco_tab(
     minutes_ago = now - datetime.timedelta(minutes=data_recency)
     minutes_ago = pd.to_datetime(minutes_ago).tz_localize('America/Sao_Paulo')
     now = pd.to_datetime(now).tz_localize('America/Sao_Paulo')
+
+    # Atualizar os parâmetros do data_update_function do ChartEditor
+    editor.update_data_params = {'start_date': minutes_ago, 'end_date': now}
 
     try:
         # Carregar dados da BitPreço
@@ -766,73 +739,30 @@ def preco_tab(
         )
 
 
-# Callback para configurar o editor de gráficos
 @app.callback(
-    Output('tab-editor', 'children'),
-    Input('tabs', 'value'),
-    State('data-recency', 'value'),
+    Output(
+        'principal-pattern-match-container', 'children', allow_duplicate=True
+    ),
+    Input('graf-info', 'value'),
+    Input('indicadores-tecnicos', 'value'),
+    Input('data-recency', 'value'),
     prevent_initial_call=True,
 )
-def editor_grafico(value, data_recency):
-    if value == 'editor':
-        try:
-            # Configurar período de tempo
-            now = datetime.datetime.now()
-            data_recency = float(data_recency or 30)
-            minutes_ago = now - datetime.timedelta(minutes=data_recency)
+def update_chart_editor_with_selections(graf_info, indicadores, data_recency):
+    """
+    Atualiza os gráficos do ChartEditor com base nas seleções do usuário.
+    """
+    # Obter data atual e calcular início do período
+    now = datetime.datetime.now()
+    data_recency = float(data_recency if data_recency is not None else 30)
+    minutes_ago = now - datetime.timedelta(minutes=data_recency)
 
-            # Atualizar dados para o ChartEditor
-            df_bity, figures = update_chart_data(
-                start_date=minutes_ago, end_date=now
-            )
+    # Atualizar parâmetros para a função de atualização
+    editor.update_data_params = {
+        'start_date': minutes_ago,
+        'end_date': now,
+        'graf_info': graf_info,
+        'indicadores': indicadores,
+    }
 
-            if df_bity is None or figures is None:
-                return dmc.Alert(
-                    'Não há dados disponíveis para o período selecionado',
-                    color='red',
-                )
-
-            # Configurar títulos para as figuras
-            figure_titles = [
-                'BTC-BRL com EMAs',
-                'BTC-BRL com Volume',
-                'BTC-BRL com Sinais',
-            ]
-
-            # Criar nova instância do ChartEditor
-            editor = ChartEditor(
-                app=app,
-                instance_id='crypto-editor',
-                data_source=df_bity,  # Passa o DataFrame diretamente
-                container_id='chart-editor-container',
-                modal_size='85%',
-                default_figures=figures,  # Lista de figuras padrão
-                figure_titles=figure_titles,  # Títulos específicos para cada figura
-                default_title='BTC-BRL Chart',  # Título padrão se não houver específico
-                card_size=600,
-                initial_cards=len(figures),  # Cria um card para cada figura
-                update_interval_id='interval-component-dash',  # ID do intervalo para atualizações
-                data_update_function=update_chart_data,  # Função para atualizar dados
-            )
-
-            # Definir parâmetros de atualização
-            editor.update_data_params = {
-                'start_date': minutes_ago,
-                'end_date': now,
-            }
-
-            # Retornar layout do editor
-            return editor.get_layout()
-
-        except Exception as e:
-            console.print_exception(show_locals=True)
-            return dmc.Alert(
-                f'Erro ao carregar o editor: {str(e)}',
-                color='red',
-            )
-
-    # Retorna um esqueleto enquanto o editor não está visível
-    return dmc.Skeleton(
-        height=400,
-        width='100%',
-    )
+    return no_update

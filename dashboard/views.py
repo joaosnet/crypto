@@ -651,7 +651,7 @@ code_card = dmc.Card(
             pb='md',
             children=[
                 dmc.CodeHighlight(
-                    id='code-highlighter',
+                    id='code-highlight',
                     language='python',
                     code="""
                         # Código da felicidade dos desenvolvedores
@@ -843,8 +843,8 @@ layout_dashboard = html.Div(
         dcc.Store(id='df-balance', storage_type='local'),
         dmc.Grid(
             [
-                # dmc.GridCol(graficos, span=8),
-                dmc.GridCol(chart_editor, span=8),
+                chart_editor,
+                # dmc.GridCol(chart_editor, span=8),
                 dmc.GridCol(historico_precos, span=4),
                 dmc.GridCol(painel_alertas, span=3),
                 dmc.GridCol(controle_tempo, span=3),

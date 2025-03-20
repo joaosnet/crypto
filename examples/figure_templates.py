@@ -1,8 +1,7 @@
 import dash_chart_editor as dce
-from dash import Dash, html, Output, Input, dcc, no_update
 import plotly.express as px
 import plotly.io as pio
-
+from dash import Dash, Input, Output, dcc, html, no_update
 
 app = Dash(
     __name__, external_scripts=['https://cdn.plot.ly/plotly-2.18.2.min.js']
@@ -73,4 +72,4 @@ def setTemplate(v, figure):
 
 
 if __name__ == '__main__':
-    app.run_server(debug=True, port=1234)
+    app.run(debug=True, port=1234)

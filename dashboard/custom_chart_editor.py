@@ -46,12 +46,13 @@ class ChartEditor:
         self.instance_id = instance_id
         self.container_id = f'{instance_id}-{container_id}'
         self.card_size = card_size
-        self.df1 = data_source
+
         self.data_source = (
             data_source.to_dict('list')
             if data_source is not None
             else px.data.iris().to_dict('list')
         )
+        self.df1 = self.data_source
         # Converter entrada única em lista se necessário
         if default_figures and not isinstance(default_figures, list):
             default_figures = [default_figures]
@@ -521,8 +522,8 @@ if __name__ == '__main__':
             dmc.Tabs(
                 [
                     dmc.TabsList([
-                        dmc.TabsTab('Página 1', value='page1'),
-                        dmc.TabsTab('Página 2', value='page2'),
+                        dmc.Tab('Página 1', value='page1'),
+                        dmc.Tab('Página 2', value='page2'),
                     ]),
                     dmc.TabsPanel(editor1.get_layout(), value='page1'),
                     dmc.TabsPanel(editor2.get_layout(), value='page2'),
@@ -530,24 +531,9 @@ if __name__ == '__main__':
                 value='page1',
                 id='page-tabs',
             ),
-            dmc.CodeHighlight(
-                id='code-highlight',
-                code="""# Kadane's Algorithm
-
-class Solution:
-    def maxSubArray(self, nums: List[int]) -> int:
-        curr, summ = nums[0], nums[0]
-        for n in nums[1:]:
-            curr = max(n, curr + n)
-            summ = max(summ, curr)
-        return summ""",
-                language='python',
-                copyLabel='Copy button code',
-                copiedLabel='Copied!',
-            ),
         ],
         id='mantine-provider',
         forceColorScheme='light',
     )
 
-    app.run_server(debug=True, port=1234)
+    app.run(debug=True, port=1234)
