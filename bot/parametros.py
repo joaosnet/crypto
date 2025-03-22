@@ -30,7 +30,7 @@ SIGNAL_SELL = -1  # Alterar de -2 para -1
 STOP_LOSS = 0.95  # Limite para stop-loss (5% abaixo do preço de compra)
 
 # Configurações adicionais
-BACKTEST_DAYS = 30
+BACKTEST_DAYS = 120
 MAX_DAILY_TRADES = 100
 
 # Parâmetros RSI e Stochastic

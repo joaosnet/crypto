@@ -10,7 +10,6 @@ import pandas as pd
 from backtesting import Backtest
 from rich.traceback import install
 
-from bot.estrategias.daytrade import DaytradeStrategy
 from bot.estrategias.TripleIndicatoStrategy import TripleIndicator
 from bot.logs.config_log import console
 from bot.parametros import BACKTEST_DAYS
@@ -32,13 +31,13 @@ def run_backtest(data, strategy_class, **strategy_params):
 
     stats = bt.run()
     console.print(f'Testando {strategy_class.__name__}')
-    console.print(f'Retorno Total: {stats["Return [%]"]:.2f}%')
-    console.print(f'Retorno Anualizado: {stats["Return (Ann.) [%]"]:.2f}%')
-    console.print(f'Máximo Drawdown: {stats["Max. Drawdown [%]"]:.2f}%')
-    console.print(f'Rácio de Sharpe: {stats["Sharpe Ratio"]:.2f}')
-    console.print(f'Número de Trades: {stats["# Trades"]}')
-    console.print(f'Win Rate: {stats["Win Rate [%]"]:.2f}%')
-    console.print(f'Profit Factor: {stats["Profit Factor"]:.2f}')
+    console.print(f'Retorno Total: {stats['Return [%]']:.2f}%')
+    console.print(f'Retorno Anualizado: {stats['Return (Ann.) [%]']:.2f}%')
+    console.print(f'Máximo Drawdown: {stats['Max. Drawdown [%]']:.2f}%')
+    console.print(f'Rácio de Sharpe: {stats['Sharpe Ratio']:.2f}')
+    console.print(f'Número de Trades: {stats['# Trades']}')
+    console.print(f'Win Rate: {stats['Win Rate [%]']:.2f}%')
+    console.print(f'Profit Factor: {stats['Profit Factor']:.2f}')
     console.print('-' * 50)
 
     return bt, stats
@@ -81,8 +80,6 @@ def run_optimization(bt, strategy_class):
         # Adapta os parâmetros conforme a estratégia utilizada
         if strategy_class == TripleIndicator:
             stats = optimize_triple_indicator(bt)
-        elif strategy_class == DaytradeStrategy:
-            stats = optimize_daytrade_strategy(bt)
         else:
             console.print(
                 f'[yellow]Estratégia {strategy_class.__name__} '
@@ -122,34 +119,10 @@ def optimize_triple_indicator(bt):
     )
 
 
-def optimize_daytrade_strategy(bt):
-    """Otimiza os parâmetros para a estratégia DaytradeStrategy"""
-    return bt.optimize(
-        ema_short=range(3, 10, 1),
-        ema_medium=range(8, 15, 1),
-        ema_long=range(15, 25, 5),
-        ema_trend=range(150, 250, 50),
-        rsi_period=range(10, 20, 2),
-        bb_period=range(15, 25, 5),
-        bb_std=range(2, 3, 1),
-        macd_fastperiod=range(8, 16, 2),
-        macd_slowperiod=range(20, 30, 5),
-        macd_signalperiod=range(7, 12, 1),
-        stoch_k_period=range(10, 20, 2),
-        stoch_slowk_period=range(3, 5, 1),
-        stoch_slowd_period=range(3, 5, 1),
-        volume_sma_period=range(15, 25, 5),
-        atr_period=range(10, 20, 2),
-        maximize='Sharpe Ratio',
-        method='sambo',
-        max_tries=100,
-    )
-
-
 def run_multiple_strategies(data):
     """Executa o backtesting para diferentes
     estratégias e compara os resultados"""
-    strategies = [DaytradeStrategy, TripleIndicator]
+    strategies = [TripleIndicator]
 
     best_stats = None
     best_bt = None
@@ -190,14 +163,21 @@ def run_multiple_strategies(data):
                 best_sharpe = opt_stats['Sharpe Ratio']
 
     # Exibir a melhor estratégia encontrada
-    console.print(
-        f'[bold green]Melhor estratégia: {best_strategy.__name__}[/bold green]'
-    )
-    console.print(f'Sharpe Ratio: {best_sharpe:.2f}')
-    console.print(f'Retorno: {best_stats["Return [%]"]:.2f}%')
+    if best_strategy is not None:
+        console.print(
+            '[bold green]Melhor estratégia: '
+            + f'{best_strategy.__name__}[/bold green]'
+        )
+        console.print(f'Sharpe Ratio: {best_sharpe:.2f}')
+        console.print(f'Retorno: {best_stats['Return [%]']:.2f}%')
 
-    # Abrir o gráfico da melhor estratégia
-    best_bt.plot(open_browser=True)
+        # Abrir o gráfico da melhor estratégia
+        best_bt.plot(open_browser=True)
+    else:
+        console.print(
+            '[bold red]Nenhuma estratégia com Sharpe '
+            + 'Ratio válido foi encontrada.[/bold red]'
+        )
 
     return best_bt, best_stats, best_strategy
 
