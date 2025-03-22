@@ -108,6 +108,7 @@ def save_to_csv_duckdb(df: pd.DataFrame, filepath: str, mode='overwrite'):
                 f"COPY (SELECT * FROM temp_df) TO '{filepath}' (HEADER true)"
             )
         else:
+            console.print_exception(show_locals=True)
             console.print(f'Erro ao salvar dados com duckdb: {e}')
             return False
     finally:

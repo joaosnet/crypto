@@ -19,7 +19,10 @@ from segredos import CAMINHO
 
 
 def get_price_history(
-    progress, task, coin_pair: str | CoinPair, interval: str = '1'
+    coin_pair: str | CoinPair,
+    interval: str = '1',
+    progress=None,
+    task=None,
 ) -> pd.DataFrame:
     """
     Obtém o histórico de preços da exchange apropriada.
@@ -60,7 +63,7 @@ def get_price_history(
 
         # Se não tiver dados ou arquivo não existir
         if df is None or df.empty:
-            df = fetch_new_data(progress, task, coin_pair, interval)
+            df = fetch_new_data(coin_pair, interval, progress, task)
         else:
             # Atualizar dados mais recentes
             df = update_recent_data(df, coin_pair, interval)
@@ -79,7 +82,10 @@ def get_price_history(
 
 
 def fetch_new_data(
-    progress, task, coin_pair: CoinPair, interval: str
+    coin_pair: CoinPair,
+    interval: str,
+    progress=None,
+    task=None,
 ) -> pd.DataFrame:
     """Busca dados completos da exchange apropriada"""
     if coin_pair.exchange == ExchangeType.BITPRECO:

@@ -15,9 +15,9 @@ from rich.progress import (
 
 from bot.analizador_de_mercado import analyze_market
 from bot.apis.api_bitpreco import Balance, ExecutedOrders, Ticker
+from bot.historico_precos import get_price_history
 from bot.indicadores.calcular_indicadores import calculate_indicators
 from bot.indicadores.gerar_sinais_compra_venda import generate_signals
-from bot.indicadores.historico_precos import get_price_history
 from bot.logs.config_log import console
 from bot.models.coin_pair import CoinPair
 from bot.parametros import (
@@ -241,7 +241,11 @@ class TradingBot:
             )
 
             # 3. Obter histórico e calcular indicadores
-            df = get_price_history(progress, task, coin_pair=coinpair)
+            df = get_price_history(
+                coin_pair=coinpair,
+                progress=progress,
+                task=task,
+            )
             progress.update(
                 task,
                 description='Histórico de preços carregado',
