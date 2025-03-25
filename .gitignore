@@ -165,3 +165,4 @@ db/*.csv
 crypto/db/trade_history.json
 crypto/db/*.parquet
 cache
+datasets/*.csv
