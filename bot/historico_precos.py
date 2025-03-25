@@ -57,8 +57,8 @@ def get_price_history(
         if os.path.exists(filepath):
             df = load_csv_in_dataframe(
                 filepath,
-                start_date=start_date,
-                end_date=end_date,
+                # start_date=start_date,
+                # end_date=end_date,
             )
 
         # Se não tiver dados ou arquivo não existir
