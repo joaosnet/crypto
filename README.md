@@ -12,7 +12,9 @@
 The cryptocurrency market is known for its high volatility and continuous operation, which presents unique opportunities for automated trading strategies. This project aims to develop an algorithmic trading system that uses Reinforcement Learning (RL) techniques to optimize buy and sell decisions for cryptocurrencies, specifically Bitcoin, in real-time.
 
 ## Skills Developed
-<img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" /> <img src="https://img.shields.io/badge/Pandas-150458?style=for-the-badge&logo=pandas&logoColor=white" /> <img src="https://img.shields.io/badge/TA--Lib-3776AB?style=for-the-badge&logo=python&logoColor=white" /> <img src="https://img.shields.io/badge/OpenAI_Gym-232F3E?style=for-the-badge&logo=openai&logoColor=white" /> <img src="https://img.shields.io/badge/Stable_Baselines3-232F3E?style=for-the-badge&logo=openai&logoColor=white" /> <img src="https://img.shields.io/badge/Dash-232F3E?style=for-the-badge&logo=dash&logoColor=white" />
+<img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" /> <img src="https://img.shields.io/badge/Pandas-150458?style=for-the-badge&logo=pandas&logoColor=white" /> <img src="https://img.shields.io/badge/TA--Lib-3776AB?style=for-the-badge&logo=python&logoColor=white" />  <img src="https://img.shields.io/badge/Dash-232F3E?style=for-the-badge&logo=dash&logoColor=white" />
+
+<!-- <img src="https://img.shields.io/badge/OpenAI_Gym-232F3E?style=for-the-badge&logo=openai&logoColor=white" /> <img src="https://img.shields.io/badge/Stable_Baselines3-232F3E?style=for-the-badge&logo=openai&logoColor=white" /> -->
 
 # Table of Contents
 

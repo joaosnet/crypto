@@ -13,7 +13,9 @@
 O mercado de criptomoedas é conhecido por sua alta volatilidade e operação contínua, o que apresenta oportunidades únicas para estratégias automatizadas de trading. Este projeto visa desenvolver um sistema de trading algorítmico que utiliza técnicas de Aprendizado por Reforço (RL) para otimizar decisões de compra e venda de criptomoedas, especificamente Bitcoin, em tempo real.
 
 ## Habilidades Desenvolvidas
-<img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" /> <img src="https://img.shields.io/badge/Pandas-150458?style=for-the-badge&logo=pandas&logoColor=white" /> <img src="https://img.shields.io/badge/TA--Lib-3776AB?style=for-the-badge&logo=python&logoColor=white" /> <img src="https://img.shields.io/badge/OpenAI_Gym-232F3E?style=for-the-badge&logo=openai&logoColor=white" /> <img src="https://img.shields.io/badge/Stable_Baselines3-232F3E?style=for-the-badge&logo=openai&logoColor=white" /> <img src="https://img.shields.io/badge/Dash-232F3E?style=for-the-badge&logo=dash&logoColor=white" />
+<img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" /> <img src="https://img.shields.io/badge/Pandas-150458?style=for-the-badge&logo=pandas&logoColor=white" /> <img src="https://img.shields.io/badge/TA--Lib-3776AB?style=for-the-badge&logo=python&logoColor=white" />  <img src="https://img.shields.io/badge/Dash-232F3E?style=for-the-badge&logo=dash&logoColor=white" />
+
+<!-- <img src="https://img.shields.io/badge/OpenAI_Gym-232F3E?style=for-the-badge&logo=openai&logoColor=white" /> <img src="https://img.shields.io/badge/Stable_Baselines3-232F3E?style=for-the-badge&logo=openai&logoColor=white" /> -->
 
 # Tabela de Conteúdos
 
